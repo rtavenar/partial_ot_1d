@@ -228,7 +228,7 @@ def partial_ot_1d(x, y, size_max=None):
         size_max = n
     assert len(y) == n, "For now"
     groups = []
-    intermediate_solutions = []
+    history = []
     cost = 0.
 
     available_direct_pairs = get_candidate_pairs(x, y)
@@ -239,10 +239,14 @@ def partial_ot_1d(x, y, size_max=None):
                                     key=lambda k: cost_available_direct_pairs[k])
 
     precomputed_costs_for_groups = {}
-    total_time = 0.
 
     for i in range(1, size_max + 1):
-        # TODO: profiling to understand where the most time is spent
+        # Have done some profiling to understand where the most time is spent
+        # A first conclusion is that the two parts that take most time are:
+        # * Computing updated costs for group modifications
+        # * Storing the list of groups at the end of each iter to be able to return the history later
+        # In fact, `sum_n_groups.py` shows that \sum_i O(n_groups_at_iter_i) = O(n^2) so any operation 
+        # that is O(n_groups) at each iter leads to overall complexity of O(n^2)
         possible_changes = []
         for i_g in range(len(groups)):
             if is_possible_type_1(groups, i_g, n):
@@ -251,6 +255,7 @@ def partial_ot_1d(x, y, size_max=None):
             if is_possible_type_2(groups, i_g, n):
                 diff_cost = get_diff_cost(EXT_GROUP_TYPE_2, groups[i_g], precomputed_costs_for_groups, x, y)
                 possible_changes.append((EXT_GROUP_TYPE_2, i_g, diff_cost))
+
         if len(available_direct_pairs) > 0:
             idx_best_pair = 0
             next_available_pair = available_direct_pairs[idx_best_pair]
@@ -266,11 +271,11 @@ def partial_ot_1d(x, y, size_max=None):
         else:
             groups[best_change[1]].extend(best_change[0])
             idx_edit = best_change[1]
-
+        
         # We have to remove the first elements in `available_direct_pairs` if they are inside an existing group
         # Other alternative would be to remove all the elements in `available_direct_pairs` that conflict with the last
         # group modification (no need to parse all groups, but need to know where the pairs are in the list)
-        # Did not investigate at the moment because it seems negligible in the total computation time
+        # This step is negligible in the total computation time
         # n=1000, ~.06s spent in this part (to be compared to 1.77s for the whole algo)
         while len(available_direct_pairs) > 0 and conflicts(available_direct_pairs[0], groups):
             del available_direct_pairs[0]
@@ -292,5 +297,5 @@ def partial_ot_1d(x, y, size_max=None):
             groups[idx_edit - 1] = new_group
             del groups[idx_edit]
         cost += best_change[2]
-        intermediate_solutions.append(deepcopy(groups))
-    return intermediate_solutions
+        history.append(deepcopy(groups))
+    return history

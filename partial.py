@@ -162,21 +162,15 @@ def partial_ot_1d(x, y, size_max=None):
     intermediate_solutions = []
     cost = 0.
 
-    # O(n^2) mais en pratique comme on cherche que les ppv peut se faire en O(n log n)
-    cdist_mat = cdist(x.reshape((-1, 1)), y.reshape((-1, 1)), 'sqeuclidean')
-    # available_direct_pairs = [
-    #     (i, np.argmin(cdist_mat[i])) for i in range(n)
-    # ]
-    # cost_available_direct_pairs = {
-    #     (i, np.argmin(cdist_mat[i])): cdist_mat[i, np.argmin(cdist_mat[i])] for i in range(n)
-    # }
+    # TODO: store only left-neighbour and right-neighbour for each xi, and only if xi is a reverse-neighbour of yj too
     available_direct_pairs = [
         (i, j) for i in range(n) for j in range(n)
     ]
     cost_available_direct_pairs = {
-        (i, j): cdist_mat[i, j] for i in range(n) for j in range(n)
+        (i, j): (x[i] - y[j]) ** 2 for (i, j) in available_direct_pairs
     }
-    # TODO: sort available_direct_pairs
+    available_direct_pairs = sorted(available_direct_pairs, 
+                                    key=lambda k: cost_available_direct_pairs[k])
 
     precomputed_costs_for_groups = {}
 
@@ -190,7 +184,7 @@ def partial_ot_1d(x, y, size_max=None):
                 diff_cost = get_diff_cost(EXT_GROUP_TYPE_2, groups[i_g], precomputed_costs_for_groups, x, y)
                 possible_changes.append((EXT_GROUP_TYPE_2, i_g, diff_cost))
         if len(available_direct_pairs) > 0:
-            idx_best_pair = argmin(available_direct_pairs, key=lambda k: cost_available_direct_pairs[k])  # TODO
+            idx_best_pair = 0
             next_available_pair = available_direct_pairs[idx_best_pair]
             cost_next_available_pair = cost_available_direct_pairs[next_available_pair]
             possible_changes.append((NEW_PAIR, next_available_pair, cost_next_available_pair))
@@ -202,12 +196,14 @@ def partial_ot_1d(x, y, size_max=None):
             groups.insert(idx_edit, g)
             precomputed_costs_for_groups[g.as_tuple] = best_change[2]
             i, j = best_change[1]
+            # TODO: here available direct_pairs are scanned to remove items, could we do that faster?
             available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
         else:
             groups[best_change[1]].extend(best_change[0])
             idx_edit = best_change[1]
             for pair in groups[best_change[1]].pairs:
                 i, j = pair
+                # TODO: here available direct_pairs are scanned to remove items, could we do that faster?
                 available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
         if idx_edit < len(groups) - 1 and groups[idx_edit].touches(groups[idx_edit + 1]):
             new_group = groups[idx_edit] + groups[idx_edit + 1]

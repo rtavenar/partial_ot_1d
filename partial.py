@@ -129,6 +129,7 @@ def is_possible_type_1(groups, idx, n):
         return False
     if idx < len(groups) - 1 and groups[idx + 1].i_y == g.j_y + 1:
         return False
+    # TODO: il y a aussi peut être un test supplémentaire (utile ?) pour voir si le coût n'est pas trop grand (> 2lambda)
     return True
 
 
@@ -148,6 +149,7 @@ def get_diff_cost(extension_type, g, precomputed_costs_for_groups, x, y):
     new_group.extend(extension_type)
     if not new_group.as_tuple in precomputed_costs_for_groups.keys():
         cost = 0.
+        # TODO: est ce qu'il y a moyen de faire mieux?
         for delta_i in range(new_group.length):
             i_x = new_group.i_x + delta_i
             i_y = new_group.i_y + delta_i

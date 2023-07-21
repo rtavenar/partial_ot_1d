@@ -1,0 +1,230 @@
+import numpy as np
+from scipy.spatial.distance import cdist
+from copy import deepcopy
+
+
+EXT_GROUP_TYPE_1 = 1
+EXT_GROUP_TYPE_2 = 2
+NEW_PAIR = 3
+
+
+class Group:
+    def __init__(self, i_x, i_y, length):
+        self.i_x = i_x
+        self.i_y = i_y
+        self.length = length
+    
+    @property
+    def j_x(self):
+        return self.i_x + self.length - 1
+    
+    @property
+    def j_y(self):
+        return self.i_y + self.length - 1
+    
+    @property
+    def as_tuple(self):
+        return (self.i_x, self.i_y, self.length)
+    
+    @property
+    def pairs(self):
+        return [(self.i_x + delta_i, self.i_y + delta_i) 
+                for delta_i in range(self.length)]
+    
+    def extend(self, type):
+        if type == EXT_GROUP_TYPE_1:
+            self.i_x -= 1
+        else:
+            self.i_y -= 1
+        self.length += 1
+    
+    def touches(self, other):
+        """
+        >>> g0 = Group(4, 3, 2)
+        >>> g1 = Group(6, 5, 3)
+        >>> g2 = Group(9, 9, 4)
+        >>> g0.touches(g1)
+        True
+        >>> g1.touches(g0)
+        True
+        >>> g0.touches(g2)
+        False
+        >>> g2.touches(g0)
+        False
+        >>> g2.touches(g1)
+        False
+        >>> g1.touches(g2)
+        False
+        """
+        if other.i_x < self.i_x:
+            return other.touches(self)
+        return (self.i_x + self.length == other.i_x and
+                self.i_y + self.length == other.i_y)
+        
+    def __eq__(self, other):
+        return (self.i_x == other.i_x and 
+                self.i_y == other.i_y and 
+                self.length == other.length)
+    
+    def __hash__(self):
+        return hash(self.as_tuple)
+    
+    def __add__(self, other):
+        return Group(
+            i_x=min(self.i_x, other.i_x),
+            i_y=min(self.i_y, other.i_y),
+            length=self.length + other.length
+        )
+    
+    def __str__(self):
+        # Spans are understood as including bounds
+        return f"<Group x_span=({self.i_x}, {self.i_x+self.length - 1}), y_span=({self.i_y}, {self.i_y+self.length - 1})>"
+
+def argmin(l, key=None):
+    """Return position of the minimum in the list 
+    (applying function `key` if providing to each element).
+    
+    >>> l = [4, 5, 3, 2, 7]
+    >>> argmin(l)
+    3
+    >>> l = [(0, 5), (3, 2), (2, 8)]
+    >>> argmin(l, key=lambda t: t[1])
+    1
+    """
+    if key is None:
+        return np.argmin(l)
+    return np.argmin([key(li) for li in l])
+
+
+def is_possible_type_1(groups, idx, n):
+    g = groups[idx]
+    if g.i_x == 0 or g.j_y == n - 1:
+        return False
+    if idx > 0 and groups[idx - 1].j_x == g.i_x - 1:
+        return False
+    if idx < len(groups) - 1 and groups[idx + 1].i_y == g.j_y + 1:
+        return False
+    return True
+
+
+def is_possible_type_2(groups, idx, n):
+    g = groups[idx]
+    if g.i_y == 0 or g.j_x == n - 1:
+        return False
+    if idx > 0 and groups[idx - 1].j_y == g.i_y - 1:
+        return False
+    if idx < len(groups) - 1 and groups[idx + 1].i_x == g.j_x + 1:
+        return False
+    return True
+
+
+def get_diff_cost(extension_type, g, precomputed_costs_for_groups, x, y):
+    new_group = deepcopy(g)
+    new_group.extend(extension_type)
+    if not new_group.as_tuple in precomputed_costs_for_groups.keys():
+        cost = 0.
+        for delta_i in range(new_group.length):
+            i_x = new_group.i_x + delta_i
+            i_y = new_group.i_y + delta_i
+            cost += (x[i_x] - y[i_y]) ** 2
+        precomputed_costs_for_groups[new_group.as_tuple] = cost
+    return precomputed_costs_for_groups[new_group.as_tuple] - precomputed_costs_for_groups[g.as_tuple]
+
+
+def get_insert_position(pair, groups):
+    """Return the index at which the group corresponding to `pair` should be included in `groups`
+    such that the order is maintained in `groups`.
+
+    >>> g0 = Group(0, 0, 3)
+    >>> g1 = Group(3, 5, 1)
+    >>> g2 = Group(7, 7, 3)
+    >>> p0 = (5, 6)
+    >>> p1 = (8, 10)
+    >>> get_insert_position(p0, [g0, g1, g2])
+    2
+    >>> get_insert_position(p1, [g0, g1, g2])
+    3
+    """
+    i_x, i_y = pair
+    for i_g, g in enumerate(groups):
+        if g.i_x > i_x:
+            return i_g
+    return len(groups)
+
+
+
+def partial_ot_1d(x, y, size_max=None):
+    n = len(x)
+    if size_max is None:
+        size_max = n
+    assert len(y) == n, "For now"
+    groups = []
+    intermediate_solutions = []
+    cost = 0.
+
+    # O(n^2) mais en pratique comme on cherche que les ppv peut se faire en O(n log n)
+    cdist_mat = cdist(x.reshape((-1, 1)), y.reshape((-1, 1)), 'sqeuclidean')
+    # available_direct_pairs = [
+    #     (i, np.argmin(cdist_mat[i])) for i in range(n)
+    # ]
+    # cost_available_direct_pairs = {
+    #     (i, np.argmin(cdist_mat[i])): cdist_mat[i, np.argmin(cdist_mat[i])] for i in range(n)
+    # }
+    available_direct_pairs = [
+        (i, j) for i in range(n) for j in range(n)
+    ]
+    cost_available_direct_pairs = {
+        (i, j): cdist_mat[i, j] for i in range(n) for j in range(n)
+    }
+    # TODO: sort available_direct_pairs
+
+    precomputed_costs_for_groups = {}
+
+    for i in range(1, size_max + 1):
+        possible_changes = []
+        for i_g in range(len(groups)):
+            if is_possible_type_1(groups, i_g, n):
+                diff_cost = get_diff_cost(EXT_GROUP_TYPE_1, groups[i_g], precomputed_costs_for_groups, x, y)
+                possible_changes.append((EXT_GROUP_TYPE_1, i_g, diff_cost))
+            if is_possible_type_2(groups, i_g, n):
+                diff_cost = get_diff_cost(EXT_GROUP_TYPE_2, groups[i_g], precomputed_costs_for_groups, x, y)
+                possible_changes.append((EXT_GROUP_TYPE_2, i_g, diff_cost))
+        if len(available_direct_pairs) > 0:
+            idx_best_pair = argmin(available_direct_pairs, key=lambda k: cost_available_direct_pairs[k])  # TODO
+            next_available_pair = available_direct_pairs[idx_best_pair]
+            cost_next_available_pair = cost_available_direct_pairs[next_available_pair]
+            possible_changes.append((NEW_PAIR, next_available_pair, cost_next_available_pair))
+        
+        best_change = possible_changes[argmin(possible_changes, key=lambda t: t[2])]
+        if best_change[0] == NEW_PAIR:
+            idx_edit = get_insert_position(best_change[1], groups)
+            g = Group(best_change[1][0], best_change[1][1], 1)
+            groups.insert(idx_edit, g)
+            precomputed_costs_for_groups[g.as_tuple] = best_change[2]
+            i, j = best_change[1]
+            available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
+        else:
+            groups[best_change[1]].extend(best_change[0])
+            idx_edit = best_change[1]
+            for pair in groups[best_change[1]].pairs:
+                i, j = pair
+                available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
+        if idx_edit < len(groups) - 1 and groups[idx_edit].touches(groups[idx_edit + 1]):
+            new_group = groups[idx_edit] + groups[idx_edit + 1]
+            precomputed_costs_for_groups[new_group.as_tuple] = (
+                precomputed_costs_for_groups[groups[idx_edit].as_tuple] + 
+                precomputed_costs_for_groups[groups[idx_edit + 1].as_tuple]
+            )
+            groups[idx_edit] = new_group
+            del groups[idx_edit + 1]
+        if idx_edit > 0 and groups[idx_edit - 1].touches(groups[idx_edit]):
+            new_group = groups[idx_edit - 1] + groups[idx_edit]
+            precomputed_costs_for_groups[new_group.as_tuple] = (
+                precomputed_costs_for_groups[groups[idx_edit - 1].as_tuple] + 
+                precomputed_costs_for_groups[groups[idx_edit].as_tuple]
+            )
+            groups[idx_edit - 1] = new_group
+            del groups[idx_edit]
+        cost += best_change[2]
+        intermediate_solutions.append(deepcopy(groups))
+    return intermediate_solutions

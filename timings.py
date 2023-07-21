@@ -2,7 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 
-from partial_old import partial_ot_1d
+from partial import partial_ot_1d
 
 np.random.seed(0)
 n_repeat = 10

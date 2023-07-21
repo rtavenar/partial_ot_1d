@@ -11,9 +11,9 @@ def plot_distrib(points, y=0, color="k"):
 
 def plot_matches(groups, x, y):
     for g in groups:
-        print(g)
+        # print(g)
         for i, j in zip(range(g.i_x, g.i_x + g.length), range(g.i_y, g.i_y + g.length)):
-            print(i, j)
+            # print(i, j)
             plt.plot([x[i], y[j]], [0.5, 0.], color="k", zorder=-1)
 
 

@@ -1,7 +1,6 @@
 import numpy as np
-from scipy.spatial.distance import cdist
 from copy import deepcopy
-
+import time
 
 EXT_GROUP_TYPE_1 = 1
 EXT_GROUP_TYPE_2 = 2
@@ -40,6 +39,14 @@ class Group:
         return [(self.i_x + delta_i, self.i_y + delta_i) 
                 for delta_i in range(self.length)]
     
+    @property
+    def first_pair(self):
+        return (self.i_x, self.i_y)
+    
+    @property
+    def last_pair(self):
+        return (self.i_x + self.length - 1, self.i_y + self.length - 1)
+    
     def extend(self, type):
         if type == EXT_GROUP_TYPE_1:
             self.i_x -= 1
@@ -71,6 +78,11 @@ class Group:
             return other.touches(self)
         return (self.i_x + self.length == other.i_x and
                 self.i_y + self.length == other.i_y)
+    
+    def intersects(self, pair):
+        i_x, i_y = pair
+        return ((self.i_x <= i_x <= self.j_x) or 
+                (self.i_y <= i_y <= self.j_y))
         
     def __eq__(self, other):
         return (self.i_x == other.i_x and 
@@ -181,25 +193,31 @@ def get_insert_position(pair, groups):
 
 def _candidate_pairs(x, y):
     n = len(x)
-    j = 0
+    i_y = 0
     candidate_pairs = []
-    for i in range(n):
-        while j < n and y[j] < x[i]:
-            j += 1
-        if j < n:
-            candidate_pairs.append((i, j))
-        if j > 0:
-            candidate_pairs.append((i, j-1))
+    for i_x in range(n):
+        while i_y < n and y[i_y] < x[i_x]:
+            i_y += 1
+        if i_y < n:
+            candidate_pairs.append((i_x, i_y))
+        if i_y > 0:
+            candidate_pairs.append((i_x, i_y-1))
     return candidate_pairs
 
 
 def get_candidate_pairs(x, y):
-    """Candidate pairs are pairs of the form (i, j) such that y_j is either
-    the nearest neighbour of x_i from the left or the one from the right.
+    """Candidate pairs are pairs of the form (i_x, i_y) such that y[i_y] is either
+    the nearest neighbour of x[i_x] from the left or the one from the right.
     """
     candidate_pairs_x_y = _candidate_pairs(x, y)
-    candidate_pairs_y_x = [(i, j) for (j, i) in _candidate_pairs(y, x)]
-    return list(set(candidate_pairs_x_y) | set(candidate_pairs_y_x))
+    candidate_pairs_y_x = [(i_x, i_y) for (i_y, i_x) in _candidate_pairs(y, x)]
+    return list(set(candidate_pairs_x_y).intersection(set(candidate_pairs_y_x)))
+
+def conflicts(pair, groups):
+    for g in groups:
+        if g.intersects(pair):
+            return True
+    return False
 
 
 def partial_ot_1d(x, y, size_max=None):
@@ -215,14 +233,16 @@ def partial_ot_1d(x, y, size_max=None):
 
     available_direct_pairs = get_candidate_pairs(x, y)
     cost_available_direct_pairs = {
-        (i, j): (x[i] - y[j]) ** 2 for (i, j) in available_direct_pairs
+        (i_x, i_y): (x[i_x] - y[i_y]) ** 2 for (i_x, i_y) in available_direct_pairs
     }
     available_direct_pairs = sorted(available_direct_pairs, 
                                     key=lambda k: cost_available_direct_pairs[k])
 
     precomputed_costs_for_groups = {}
+    total_time = 0.
 
     for i in range(1, size_max + 1):
+        # TODO: profiling to understand where the most time is spent
         possible_changes = []
         for i_g in range(len(groups)):
             if is_possible_type_1(groups, i_g, n):
@@ -243,16 +263,18 @@ def partial_ot_1d(x, y, size_max=None):
             g = Group(best_change[1][0], best_change[1][1], 1)
             groups.insert(idx_edit, g)
             precomputed_costs_for_groups[g.as_tuple] = best_change[2]
-            i, j = best_change[1]
-            # TODO: here available_direct_pairs are scanned to remove items, could we do that faster?
-            available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
         else:
             groups[best_change[1]].extend(best_change[0])
             idx_edit = best_change[1]
-            for pair in groups[best_change[1]].pairs:
-                i, j = pair
-                # TODO: here available_direct_pairs are scanned to remove items, could we do that faster?
-                available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
+
+        # We have to remove the first elements in `available_direct_pairs` if they are inside an existing group
+        # Other alternative would be to remove all the elements in `available_direct_pairs` that conflict with the last
+        # group modification (no need to parse all groups, but need to know where the pairs are in the list)
+        # Did not investigate at the moment because it seems neglictible in the total computation time
+        # n=1000, ~.06s spent in this part (to be compared to 1.77s for the whole algo)
+        while len(available_direct_pairs) > 0 and conflicts(available_direct_pairs[0], groups):
+            del available_direct_pairs[0]
+
         if idx_edit < len(groups) - 1 and groups[idx_edit].touches(groups[idx_edit + 1]):
             new_group = groups[idx_edit] + groups[idx_edit + 1]
             precomputed_costs_for_groups[new_group.as_tuple] = (

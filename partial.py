@@ -9,6 +9,15 @@ NEW_PAIR = 3
 
 
 class Group:
+    """A Group is a set of consecutive pairs.
+    In a group:
+    * `i_x` is the first index from x
+    * `i_y` is the first index from y
+    * `length` is the number of consecutive pairs in the group
+    * `j_x` is the last included index from x (computed on the fly)
+    * `j_y` is the last included index from y (computed on the fly)
+    * `pairs` is the ordered list of all pairs in the group (computed on the fly)
+    """
     def __init__(self, i_x, i_y, length):
         self.i_x = i_x
         self.i_y = i_y
@@ -39,7 +48,9 @@ class Group:
         self.length += 1
     
     def touches(self, other):
-        """
+        """`a.touches(b)` is True iff `a` and `b` are disjoint 
+        and could be merged to form a new group of consecutive pairs.
+
         >>> g0 = Group(4, 3, 2)
         >>> g1 = Group(6, 5, 3)
         >>> g2 = Group(9, 9, 4)
@@ -70,6 +81,17 @@ class Group:
         return hash(self.as_tuple)
     
     def __add__(self, other):
+        """
+        `a + b` is the result of the merge of `a` and `b` into a new group.
+        This operation is valid iff `a.touches(b)`.
+
+        >>> g0 = Group(4, 3, 2)
+        >>> g1 = Group(6, 5, 3)
+        >>> g0.touches(g1)
+        True
+        >>> g0 + g1
+        <Group x_span=(4, 8), y_span=(3, 7)>
+        """
         return Group(
             i_x=min(self.i_x, other.i_x),
             i_y=min(self.i_y, other.i_y),
@@ -78,7 +100,10 @@ class Group:
     
     def __str__(self):
         # Spans are understood as including bounds
-        return f"<Group x_span=({self.i_x}, {self.i_x+self.length - 1}), y_span=({self.i_y}, {self.i_y+self.length - 1})>"
+        return f"<Group x_span=({self.i_x}, {self.j_x}), y_span=({self.i_y}, {self.j_y})>"
+    
+    def __repr__(self):
+        return str(self)
 
 def argmin(l, key=None):
     """Return position of the minimum in the list 

@@ -16,10 +16,9 @@ for _ in range(n_repeat):
 
     solutions = partial_ot_1d(x, y)
     n_groups += [len(groups) for groups in solutions]
-n_groups /= n_repeat
     
 plt.figure()
-plt.plot(steps, n_groups)
+plt.plot(steps, n_groups / n_repeat)
 plt.xlabel("Step")
 plt.ylabel("Average number of groups")
 plt.tight_layout()

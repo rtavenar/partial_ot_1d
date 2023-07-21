@@ -270,7 +270,7 @@ def partial_ot_1d(x, y, size_max=None):
         # We have to remove the first elements in `available_direct_pairs` if they are inside an existing group
         # Other alternative would be to remove all the elements in `available_direct_pairs` that conflict with the last
         # group modification (no need to parse all groups, but need to know where the pairs are in the list)
-        # Did not investigate at the moment because it seems neglictible in the total computation time
+        # Did not investigate at the moment because it seems negligible in the total computation time
         # n=1000, ~.06s spent in this part (to be compared to 1.77s for the whole algo)
         while len(available_direct_pairs) > 0 and conflicts(available_direct_pairs[0], groups):
             del available_direct_pairs[0]

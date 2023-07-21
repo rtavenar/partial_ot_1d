@@ -203,7 +203,8 @@ def get_candidate_pairs(x, y):
 
 
 def partial_ot_1d(x, y, size_max=None):
-    """Important notice: x and y are supposed to be sorted here!"""
+    x.sort()
+    y.sort()
     n = len(x)
     if size_max is None:
         size_max = n

@@ -179,8 +179,31 @@ def get_insert_position(pair, groups):
     return len(groups)
 
 
+def _candidate_pairs(x, y):
+    n = len(x)
+    j = 0
+    candidate_pairs = []
+    for i in range(n):
+        while j < n and y[j] < x[i]:
+            j += 1
+        if j < n:
+            candidate_pairs.append((i, j))
+        if j > 0:
+            candidate_pairs.append((i, j-1))
+    return candidate_pairs
+
+
+def get_candidate_pairs(x, y):
+    """Candidate pairs are pairs of the form (i, j) such that y_j is either
+    the nearest neighbour of x_i from the left or the one from the right.
+    """
+    candidate_pairs_x_y = _candidate_pairs(x, y)
+    candidate_pairs_y_x = [(i, j) for (j, i) in _candidate_pairs(y, x)]
+    return list(set(candidate_pairs_x_y) | set(candidate_pairs_y_x))
+
 
 def partial_ot_1d(x, y, size_max=None):
+    """Important notice: x and y are supposed to be sorted here!"""
     n = len(x)
     if size_max is None:
         size_max = n
@@ -189,10 +212,7 @@ def partial_ot_1d(x, y, size_max=None):
     intermediate_solutions = []
     cost = 0.
 
-    # TODO: store only left-neighbour and right-neighbour for each xi, and only if xi is a reverse-neighbour of yj too
-    available_direct_pairs = [
-        (i, j) for i in range(n) for j in range(n)
-    ]
+    available_direct_pairs = get_candidate_pairs(x, y)
     cost_available_direct_pairs = {
         (i, j): (x[i] - y[j]) ** 2 for (i, j) in available_direct_pairs
     }
@@ -223,14 +243,14 @@ def partial_ot_1d(x, y, size_max=None):
             groups.insert(idx_edit, g)
             precomputed_costs_for_groups[g.as_tuple] = best_change[2]
             i, j = best_change[1]
-            # TODO: here available direct_pairs are scanned to remove items, could we do that faster?
+            # TODO: here available_direct_pairs are scanned to remove items, could we do that faster?
             available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
         else:
             groups[best_change[1]].extend(best_change[0])
             idx_edit = best_change[1]
             for pair in groups[best_change[1]].pairs:
                 i, j = pair
-                # TODO: here available direct_pairs are scanned to remove items, could we do that faster?
+                # TODO: here available_direct_pairs are scanned to remove items, could we do that faster?
                 available_direct_pairs = [p for p in available_direct_pairs if p[0] != i and p[1] != j]
         if idx_edit < len(groups) - 1 and groups[idx_edit].touches(groups[idx_edit + 1]):
             new_group = groups[idx_edit] + groups[idx_edit + 1]

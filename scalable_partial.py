@@ -350,7 +350,6 @@ class PartialOT1d:
         sol_indices_x_sorted, sol_indices_y_sorted = self.generate_solution(costs, ranks_xy)
 
         self.check_solution_valid(sol_indices_x_sorted, sol_indices_y_sorted)
-        # TODO: write better docs for each method
 
         # Convert back into indices in original `x` and `y` distribs
         return self.indices_sort_x[sol_indices_x_sorted], self.indices_sort_y[sol_indices_y_sorted]

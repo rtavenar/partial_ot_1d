@@ -22,8 +22,19 @@ class PartialOT1d:
        return len(self.y)
 
     def preprocess(self, x, y):
-        self.x = x
-        self.y = y
+        """Given two 1d distributions `x` and `y`:
+        
+        1. `self.indices_sort_x` sorts `x` (ie. `x[self.indices_sort_x]` is sorted) and
+           `self.indices_sort_y` sorts `y` (ie. `y[self.indices_sort_y]` is sorted)
+        
+        2. stack them into a single distrib such that:
+        
+        * the new distrib is sorted with sort indices (wrt a stack of sorted x and sorted y) `self.indices_sort_xy`
+        * `self.sorted_distrib_indicator` is a vector of zeros and ones where 0 means 
+          "this point comes from x" and 1 means "this point comes from y"
+        """
+        self.x = x if type(x) is np.ndarray else np.array(x)
+        self.y = y if type(y) is np.ndarray else np.array(y)
 
         self.indices_sort_x = np.argsort(x)
         self.indices_sort_y = np.argsort(y)
@@ -35,6 +46,19 @@ class PartialOT1d:
         self.sorted_distrib_indicator = idx[self.indices_sort_xy]
     
     def _binary_search(self, arr, target):
+        """Return the first element in `arr` that is strictly greater than `target` 
+        (returns `None` if all elements in `arr` are lower or equal than `target`).
+        
+        Note that `arr` is assumed to be sorted.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(-1)
+        >>> p._binary_search([0, 2, 4, 5, 7], 4)
+        5
+        >>> p._binary_search([0, 2, 4], 4)  # None
+        >>> p._binary_search([], 4)         # None
+        """
         left, right = 0, len(arr) - 1
         while left <= right:
             mid = (left + right) // 2
@@ -44,18 +68,24 @@ class PartialOT1d:
                 right = mid - 1
         return arr[left] if left < len(arr) else None
 
-    # TODO: change this for indices to be a class index
-    def _insert_constant_values(self, arr, indices):
-        """
-        Assumes indices is a boolean array.
-        
-        Takes arr as input. For each position i in arr, if indices[i] is True,
-        the value from arr is copied, 
-        otherwise, the previous value that was copied from arr is repeated.
+    def _insert_constant_values(self, arr, distrib_index):
+        """Takes `arr` as input. For each position `i` in `arr`, 
+        if `self.sorted_distrib_indicator[i]==distrib_index`,
+        the value from `arr` is copied, 
+        otherwise, the previous value that was copied from `arr` is repeated.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(-1)
+        >>> x = [0, 3, 4]
+        >>> y = [1, 2, 5]
+        >>> p.preprocess(x, y)
+        >>> p._insert_constant_values([1, -1, -1, 2, 3, -1], 0)
+        array([1, 1, 1, 2, 3, 3])
         """
         arr_insert = []
         for i in range(len(arr)):
-            if indices[i]:
+            if self.sorted_distrib_indicator[i]==distrib_index:
                 arr_insert.append(arr[i])
             elif i == 0:
                 arr_insert.append(0)
@@ -64,17 +94,78 @@ class PartialOT1d:
         return np.array(arr_insert)
 
     def compute_cumulative_sum_differences(self):
+        """Computes difference between cumulative sums for both distribs.
+
+        The cumulative sum vector for a sorted x is:
+
+            cumsum_x = [x_0, x_0 + x_1, ..., x_0 + ... + x_n]
+
+        This vector is then extend to reach a length of 2*n by repeating 
+        values at places that correspond to an y item.
+        In other words, if the order of x and y elements on the real 
+        line is something like x-y-y-x..., then the extended vector is 
+        (note the repetitions):
+
+            cumsum_x = [x_0, x_0, x_0, x_0 + x_1, ..., x_0 + ... + x_n]
+
+        Overall, this function returns `cumsum_x - cumsum_y` where `cumsum_x`
+        and `cumsum_y` are the extended versions.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(-1)
+        >>> x = [-1, 3, 4]
+        >>> y = [1, 2, 5]
+        >>> p.preprocess(x, y)
+        >>> p.sorted_distrib_indicator
+        array([0, 1, 1, 0, 0, 1])
+        >>> p.compute_cumulative_sum_differences()  # [-1, -1, -1, 2, 6, 6] - [0, 1, 3, 3, 3, 8]
+        array([-1, -2, -4, -1,  3, -2])
+        """
         cum_sum_xs = np.cumsum(self.x_sorted)
         cum_sum_ys = np.cumsum(self.y_sorted)
         cum_sum = np.concatenate((cum_sum_xs, cum_sum_ys))
         cum_sum = cum_sum[self.indices_sort_xy]
 
-        cum_sum_x = self._insert_constant_values(cum_sum, self.sorted_distrib_indicator==0)
-        cum_sum_y = self._insert_constant_values(cum_sum, self.sorted_distrib_indicator==1)
+        cum_sum_x = self._insert_constant_values(cum_sum, 0)
+        cum_sum_y = self._insert_constant_values(cum_sum, 1)
 
         return cum_sum_x - cum_sum_y
 
     def compute_rank_differences(self):
+        """Precompute important rank-related quantities for better group generation.
+        
+        Three quantities are returned:
+
+        * `ranks_xy` is an array that gathers ranks of the elements in 
+          their original distrib, eg. if the distrib indicator is
+          [0, 1, 1, 0, 0, 1], then `rank_xy` will be:
+          [0, 0, 1, 1, 2, 2]
+        * `diff_ranks` is computed from `ranks_xy_x_cum` and `ranks_xy_y_cum`.
+          For the example above, we would have:
+          
+            ranks_xy_x_cum = [1, 1, 1, 2, 3, 3]
+            ranks_xy_y_cum = [0, 1, 2, 2, 2, 3]
+
+          And `diff_ranks` is just `ranks_xy_x_cum - ranks_xy_y_cum`.
+
+        * `d_cumranks_indices` indicates, for each `diff_ranks` value, 
+          the sorted lists of all indexes of its occurrences in `diff_ranks`
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=2)
+        >>> x = [-2, 2, 3]
+        >>> y = [-1, 1, 5]
+        >>> p.preprocess(x, y)
+        >>> ranks_xy, diff_ranks, d_cumranks_indices = p.compute_rank_differences()
+        >>> ranks_xy
+        array([0, 0, 1, 1, 2, 2])
+        >>> diff_ranks
+        array([ 1,  0, -1,  0,  1,  0])
+        >>> d_cumranks_indices
+        {1: [0, 4], 0: [1, 3, 5], -1: [2]}
+        """
         ranks_x, ranks_y = np.arange(self.n_x), np.arange(self.n_y)
         ranks_xy = np.concatenate((ranks_x, ranks_y))
         ranks_xy = ranks_xy[self.indices_sort_xy]
@@ -82,12 +173,12 @@ class PartialOT1d:
         ranks_xy_x = ranks_xy.copy()
         ranks_xy_x[self.sorted_distrib_indicator==1] = 0
         ranks_xy_x[self.sorted_distrib_indicator==0] += 1
-        ranks_xy_x_cum = self._insert_constant_values(ranks_xy_x, self.sorted_distrib_indicator==0)
+        ranks_xy_x_cum = self._insert_constant_values(ranks_xy_x, 0)
 
         ranks_xy_y = ranks_xy.copy()
         ranks_xy_y[self.sorted_distrib_indicator==0] = 0
         ranks_xy_y[self.sorted_distrib_indicator==1] += 1
-        ranks_xy_y_cum = self._insert_constant_values(ranks_xy_y, self.sorted_distrib_indicator==1)
+        ranks_xy_y_cum = self._insert_constant_values(ranks_xy_y, 1)
 
         diff_ranks = ranks_xy_x_cum - ranks_xy_y_cum
 
@@ -98,6 +189,15 @@ class PartialOT1d:
         return ranks_xy, diff_ranks, d_cumranks_indices
     
     def compute_costs(self, diff_cum_sum, diff_ranks, d_cumranks_indices):
+        """For each element in sorted `x`, compute its group (cf note below).
+        Then compute the cost for each group and sort all groups in increasing 
+        cost order.
+
+        Note: the "group" of a point x_i in x is the minimal set of adjacent 
+        points (starting at x_i and extending to the right) that one should 
+        take to get a balanced set (ie. a set in which we have as many 
+        elements from x as elements from y)
+        """
         l_costs = []
         for i in range(len(diff_ranks)):
             # For each item in either distrib, find the scope of the smallest
@@ -121,6 +221,23 @@ class PartialOT1d:
         return sorted(l_costs, key=lambda x: x[2])[:self.max_iter]
 
     def generate_solution(self, costs, ranks_xy):
+        """Generate a solution from a sorted list of group costs.
+        See the note in `compute_costs` docs for a definition of groups.
+
+        The solution is a pair of lists. The first list contains the indices from `sorted_x`
+        that are in the active set, and the second one contains the indices from `sorted_y`
+        that are in the active set.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=2)
+        >>> x = [-2, 3.1, 5]
+        >>> y = [-1, 1, 3]
+        >>> p.preprocess(x, y)
+        >>> ranks_xy = p.compute_rank_differences()[0]
+        >>> p.generate_solution([(3, 4, 0.10000000000000009), (0, 1, 1.0)], ranks_xy)
+        (array([0, 1]), array([0, 2]))
+        """
         iter_enters_solution = {}
         for iter, (i, j, _) in enumerate(costs):
             if i not in iter_enters_solution:
@@ -130,11 +247,19 @@ class PartialOT1d:
         superset_of_active_set = sorted(iter_enters_solution.keys())
 
         # Gather packs of adjacent points in `superset_of_active_set`
-        idx_active = np.zeros((self.n_x + self.n_y + 1), dtype=int)
-        idx_active[superset_of_active_set] = 1
-        diff_idx = idx_active[1:] - idx_active[:-1]
-        idx_start = np.where(diff_idx == 1)[0] + 1
-        idx_end = np.where(diff_idx == -1)[0] + 1  # idx_end is excluded (first index outside the pack)
+        # The commented code below is buggy, so I moved to a simpler yet less efficient variant (see below)
+        # 
+        # idx_active = np.zeros((self.n_x + self.n_y + 1), dtype=int)
+        # idx_active[superset_of_active_set] = 1
+        # diff_idx = idx_active[1:] - idx_active[:-1]
+        # idx_start = np.where(diff_idx == 1)[0] + 1
+        # idx_end = np.where(diff_idx == -1)[0] + 1  # idx_end is excluded (first index outside the pack)
+        idx_start, idx_end = [], []
+        for i, pos in enumerate(superset_of_active_set):
+            if i == 0 or pos > superset_of_active_set[i-1] + 1:
+                idx_start.append(pos)
+            elif i == len(superset_of_active_set) - 1 or superset_of_active_set[i+1] > pos + 1:
+                idx_end.append(pos + 1)
 
         # For each pack, remove extra points that prevent it from being an actual set of pairs
         # for i, j in zip(idx_start, idx_end):
@@ -172,11 +297,45 @@ class PartialOT1d:
         return ranks_active_set[which_distrib == 0], ranks_active_set[which_distrib == 1]
     
     def check_solution_valid(self, indices_x, indices_y):
+        """Check that a solution (given by two lists of indices in 
+        sorted x and sorted y respectively) is valid.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(-1)
+        >>> x = [-2, 3, 5]
+        >>> y = [-1, 1, 3]
+        >>> p.preprocess(x, y)
+        >>> p.check_solution_valid([0, 1], [0, 2])
+        >>> p.check_solution_valid([0, 1], [0, 1, 2])  # This one raises a warning
+        >>> p.check_solution_valid([0, 1], [0, 3])     # This one too
+        """
         if len(indices_x) != len(indices_y):
             warnings.warn("A valid solution should have as many x's as y's", RuntimeWarning)
+        if not np.alltrue(np.array(indices_x) < self.n_x) or not np.alltrue(np.array(indices_x) >= 0):
+            warnings.warn(f"All x indices should be between 0 and {self.n_x - 1}", RuntimeWarning)
+        if not np.alltrue(np.array(indices_y) < self.n_y) or not np.alltrue(np.array(indices_y) >= 0):
+            warnings.warn(f"All y indices should be between 0 and {self.n_y - 1}", RuntimeWarning)
         # We could implement other checks here
 
     def fit(self, x, y):
+        """Main method for the class.
+        
+        Does:
+        
+        1. Preprocessing of the distribs (sorted & co)
+        2. Precomputations (ranks, cumulative sums)
+        3. Extraction of groups
+        4. Generate and return solution
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=2)
+        >>> x = [5, -2, 3.1]
+        >>> y = [-1, 1, 3]
+        >>> p.fit(x, y)
+        (array([1, 2]), array([0, 2]))
+        """
         # Sort distribs and keep track of their original indices (stored in instance attributes)
         self.preprocess(x, y)
 
@@ -193,6 +352,7 @@ class PartialOT1d:
         self.check_solution_valid(sol_indices_x_sorted, sol_indices_y_sorted)
         # TODO: write better docs for each method
 
+        # Convert back into indices in original `x` and `y` distribs
         return self.indices_sort_x[sol_indices_x_sorted], self.indices_sort_y[sol_indices_y_sorted]
 
 

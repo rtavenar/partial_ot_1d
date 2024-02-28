@@ -19,7 +19,7 @@ for n in values_for_n:
         PartialOT1d(max_iter=n).fit(x, y)
     avg_time = (time.time() - t0) / n_repeat
     timings.append(avg_time)
-    print(f"n={n:04d}\ttime={avg_time}")
+    print(f"n={n:04d}\ttime={avg_time}\tvalue of constant C in complexity (C * n log n)={avg_time / (n * np.log(n))}")
     
 plt.figure()
 plt.loglog(values_for_n, timings)

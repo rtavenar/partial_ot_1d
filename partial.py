@@ -156,7 +156,7 @@ def is_possible_type_2(groups, idx, n):
     return True
 
 
-def get_diff_cost(extension_type, g, precomputed_costs_for_groups, x, y):
+def get_diff_cost(extension_type, g, precomputed_costs_for_groups, x, y, cost_fun):
     new_group = deepcopy(g)
     new_group.extend(extension_type)
     if not new_group.as_tuple in precomputed_costs_for_groups.keys():
@@ -165,7 +165,7 @@ def get_diff_cost(extension_type, g, precomputed_costs_for_groups, x, y):
         for delta_i in range(new_group.length):
             i_x = new_group.i_x + delta_i
             i_y = new_group.i_y + delta_i
-            cost += (x[i_x] - y[i_y]) ** 2
+            cost += cost_fun(x[i_x], y[i_y])
         precomputed_costs_for_groups[new_group.as_tuple] = cost
     return precomputed_costs_for_groups[new_group.as_tuple] - precomputed_costs_for_groups[g.as_tuple]
 
@@ -220,7 +220,16 @@ def conflicts(pair, groups):
     return False
 
 
-def partial_ot_1d(x, y, size_max=None):
+def euc_sq(xi, yj):
+    return (xi - yj) ** 2
+
+def l1(xi, yj):
+    return abs(xi - yj)
+
+
+def partial_ot_1d(x, y, size_max=None, cost_fun=None):
+    if cost_fun is None:
+        cost_fun = euc_sq
     x.sort()
     y.sort()
     n = len(x)
@@ -233,7 +242,7 @@ def partial_ot_1d(x, y, size_max=None):
 
     available_direct_pairs = get_candidate_pairs(x, y)
     cost_available_direct_pairs = {
-        (i_x, i_y): (x[i_x] - y[i_y]) ** 2 for (i_x, i_y) in available_direct_pairs
+        (i_x, i_y): cost_fun(x[i_x], y[i_y]) for (i_x, i_y) in available_direct_pairs
     }
     available_direct_pairs = sorted(available_direct_pairs, 
                                     key=lambda k: cost_available_direct_pairs[k])
@@ -250,10 +259,12 @@ def partial_ot_1d(x, y, size_max=None):
         possible_changes = []
         for i_g in range(len(groups)):
             if is_possible_type_1(groups, i_g, n):
-                diff_cost = get_diff_cost(EXT_GROUP_TYPE_1, groups[i_g], precomputed_costs_for_groups, x, y)
+                diff_cost = get_diff_cost(EXT_GROUP_TYPE_1, groups[i_g], 
+                                          precomputed_costs_for_groups, x, y, cost_fun)
                 possible_changes.append((EXT_GROUP_TYPE_1, i_g, diff_cost))
             if is_possible_type_2(groups, i_g, n):
-                diff_cost = get_diff_cost(EXT_GROUP_TYPE_2, groups[i_g], precomputed_costs_for_groups, x, y)
+                diff_cost = get_diff_cost(EXT_GROUP_TYPE_2, groups[i_g], 
+                                          precomputed_costs_for_groups, x, y, cost_fun)
                 possible_changes.append((EXT_GROUP_TYPE_2, i_g, diff_cost))
 
         if len(available_direct_pairs) > 0:

@@ -228,6 +228,9 @@ class PartialOT1d:
         that are in the active set, and the second one contains the indices from `sorted_y`
         that are in the active set.
 
+        AT THE MOMENT, THIS ONE DOES NOT WORK PROPERLY, SOMETIMES IT CANNOT EXTRACT CORRECT SOLUTIONS 
+        FROM GROUPS SORTED BY COSTS.
+
         Examples
         --------
         >>> p = PartialOT1d(max_iter=2)

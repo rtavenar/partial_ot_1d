@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+from sortedcontainers import SortedList
 
 class PartialOT1d:
     def __init__(self, max_iter) -> None:
@@ -229,7 +230,7 @@ class PartialOT1d:
         that are in the active set.
 
         AT THE MOMENT, THIS ONE DOES NOT WORK PROPERLY, SOMETIMES IT CANNOT EXTRACT CORRECT SOLUTIONS 
-        FROM GROUPS SORTED BY COSTS.
+        FROM GROUPS SORTED BY COSTS. USE `generate_solutions_using_candidates` instead
 
         Examples
         --------
@@ -299,6 +300,143 @@ class PartialOT1d:
 
         return ranks_active_set[which_distrib == 0], ranks_active_set[which_distrib == 1]
     
+    def _find_best_match(self, i: int, candidates: SortedList, active_set: set):
+        """Given a potential new candidate `i`, could it be matched with a candidate in the
+        sorted list `candidates` such that they would be part of a pack 
+        (set of contiguous indexes in the active set)?
+
+        If yes, the index of the match is returned.
+
+        TODO: if two matches are possible, we should return the best, 
+        which we don't do at the moment (we return the first one).
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=-1)
+        >>> active_set = {1, 2, 3, 4}
+        >>> candidates = SortedList([0])
+        >>> #p._find_best_match(6, candidates, active_set)  # None
+        >>> p._find_best_match(5, candidates, active_set)
+        0
+        """
+        potential_matches = []
+        next_pos = candidates.bisect_right(i)
+        my_candidates = []
+        if next_pos > 0:
+            my_candidates.append(candidates[next_pos - 1])
+        if next_pos <= len(candidates) - 1:
+            my_candidates.append(candidates[next_pos])
+        for cand in my_candidates:
+            # TODO: find out why a candidate can be in the active_set
+            assert cand not in active_set
+            can_match_with_i = True
+            for pos in range(min(i, cand) + 1, max(i, cand)):
+                if pos not in active_set:
+                    can_match_with_i = False
+                    break
+            if can_match_with_i:
+                potential_matches.append(cand)
+        if len(potential_matches) > 0:
+            # TODO: check which match is the best here 
+            # if there are two potential matches
+            return potential_matches[0]
+    
+    def _match_candidates(self, i: int, active_set: set, candidates_from_x: SortedList, candidates_from_y: SortedList):
+        """Given a potential new candidate `i`, could it be matched with a candidate in the
+        sorted list `candidates` corresponding to the other distrib such that they would be part 
+        of a pack (set of contiguous indexes in the active set)?
+
+        If yes, the new candidate and its match are added to the active set.
+        If not, the new candidate is added to the corresponding sorted list of candidates.        
+        
+        TODO: Important question we do not deal with at the moment: could there be a cascade of 
+        candidate matchings?
+        Like if we match two points i and j that were candidates, that creates a new pack from i to j (at least).
+        If i-1 and j+1 are candidates not coming from the same distrib, we should probably add them too. 
+        Or is it impossible?
+        
+        # TODO: add doctests here
+        """
+        if self.sorted_distrib_indicator[i] == 0:  # i comes from x
+            assert i not in candidates_from_x  # TODO: we do not deal with that at the moment
+            match = self._find_best_match(i, candidates_from_y, active_set)
+            if match is None:
+                candidates_from_x.add(i)
+            else:
+                active_set.add(i)
+                active_set.add(match)
+                candidates_from_y.remove(match)
+        else:  # i comes from y
+            assert i not in candidates_from_y  # TODO: we do not deal with that at the moment
+            match = self._find_best_match(i, candidates_from_x, active_set)
+            if match is None:
+                candidates_from_y.add(i)
+            else:
+                active_set.add(i)
+                active_set.add(match)
+                candidates_from_x.remove(match)
+        return active_set, candidates_from_x, candidates_from_y
+
+    def generate_solution_using_candidates(self, costs, ranks_xy):
+        """Generate a solution from a sorted list of group costs.
+        See the note in `compute_costs` docs for a definition of groups.
+
+        The solution is a pair of lists. The first list contains the indices from `sorted_x`
+        that are in the active set, and the second one contains the indices from `sorted_y`
+        that are in the active set.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=2)
+        >>> x = [1, 2, 5, 6]
+        >>> y = [3, 4, 11, 12]
+        >>> p.preprocess(x, y)
+        >>> ranks_xy = p.compute_rank_differences()[0]
+        >>> p.generate_solution_using_candidates([(1, 2, 1.0), (3, 4, 1.0)], ranks_xy)
+        (array([1, 2]), array([0, 1]))
+        >>> p.generate_solution_using_candidates([(1, 2, 1.0), (3, 4, 1.0), (2, 5, 4.0)], ranks_xy)
+        (array([1, 2]), array([0, 1]))
+        >>> p.generate_solution_using_candidates([(1, 2, 1.0), (3, 4, 1.0), (2, 5, 4.0), (0, 3, 4.0), (5, 6, 5.0)], ranks_xy)
+        (array([1, 2, 3]), array([0, 1, 2]))
+        """
+        active_set = set()
+        # We use sorted lists below so that it is not too costly to 
+        # find neighbouring candidates for a new candidate
+        candidates_x = SortedList()
+        candidates_y = SortedList()
+        for i, j, c in costs:
+            if i not in active_set and j not in active_set:
+                active_set.add(i)
+                active_set.add(j)
+                for idx in [i, j]:
+                    for candidate_list in [candidates_x, candidates_y]:        
+                        if idx in candidate_list:
+                            candidate_list.remove(idx)
+            elif i not in active_set:
+                # Check if a candidate can be matched with i
+                active_set, candidates_x, candidates_y = self._match_candidates(i, 
+                                                                                active_set, 
+                                                                                candidates_x, 
+                                                                                candidates_y)                
+            elif j not in active_set:
+                # Check if a candidate can be matched with j
+                active_set, candidates_x, candidates_y = self._match_candidates(j, 
+                                                                                active_set, 
+                                                                                candidates_x, 
+                                                                                candidates_y)
+            else:
+                # Not sure why, but we sometimes end here...
+                pass
+
+        # Generate active_set as sorted set of indexes
+        active_set = sorted(active_set)
+
+        # Write down solution with remaining points
+        ranks_active_set = ranks_xy[active_set]
+        which_distrib = self.sorted_distrib_indicator[active_set]
+
+        return ranks_active_set[which_distrib == 0], ranks_active_set[which_distrib == 1]
+    
     def check_solution_valid(self, indices_x, indices_y):
         """Check that a solution (given by two lists of indices in 
         sorted x and sorted y respectively) is valid.
@@ -350,7 +488,7 @@ class PartialOT1d:
         costs = self.compute_costs(diff_cum_sum, diff_ranks, d_cumranks_indices)
 
         # Generate solution from sorted costs
-        sol_indices_x_sorted, sol_indices_y_sorted = self.generate_solution(costs, ranks_xy)
+        sol_indices_x_sorted, sol_indices_y_sorted = self.generate_solution_using_candidates(costs, ranks_xy)
 
         self.check_solution_valid(sol_indices_x_sorted, sol_indices_y_sorted)
 
@@ -360,8 +498,11 @@ class PartialOT1d:
 
 
 if __name__ == "__main__":
-    pb = PartialOT1d(max_iter=10)
+    pb = PartialOT1d(max_iter=40)
     np.random.seed(0)
-    x = np.random.rand(10, )
-    y = np.random.rand(10, )
-    print(pb.fit(x, y))
+    x = np.random.rand(30, )
+    y = np.random.rand(30, )
+    indices_x, indices_y = pb.fit(x, y)
+    print(len(indices_x), len(indices_y))
+    print(indices_x)
+    print(indices_y)

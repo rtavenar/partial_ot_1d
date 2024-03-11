@@ -315,7 +315,7 @@ class PartialOT1d:
         >>> p = PartialOT1d(max_iter=-1)
         >>> active_set = {1, 2, 3, 4}
         >>> candidates = SortedList([0])
-        >>> #p._find_best_match(6, candidates, active_set)  # None
+        >>> p._find_best_match(6, candidates, active_set)  # None
         >>> p._find_best_match(5, candidates, active_set)
         0
         """
@@ -353,28 +353,38 @@ class PartialOT1d:
         candidate matchings?
         Like if we match two points i and j that were candidates, that creates a new pack from i to j (at least).
         If i-1 and j+1 are candidates not coming from the same distrib, we should probably add them too. 
-        Or is it impossible?
-        
-        # TODO: add doctests here
+        Or is it impossible? It might be impossible, but we still need to prove it.
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=2)
+        >>> x = [-0.5, 3.1, 5]
+        >>> y = [-1, 1, 3]
+        >>> p.preprocess(x, y)
+        >>> active_set = {1, 2, 3, 4}
+        >>> candidates_from_x = SortedList([])
+        >>> candidates_from_y = SortedList([0])
+        >>> a_s, cand_x, cand_y = p._match_candidates(5, active_set, candidates_from_x, candidates_from_y)  # None
+        >>> a_s
+        {0, 1, 2, 3, 4, 5}
+        >>> cand_x
+        SortedList([])
+        >>> cand_y
+        SortedList([])
         """
-        if self.sorted_distrib_indicator[i] == 0:  # i comes from x
-            assert i not in candidates_from_x  # TODO: we do not deal with that at the moment
-            match = self._find_best_match(i, candidates_from_y, active_set)
-            if match is None:
-                candidates_from_x.add(i)
-            else:
-                active_set.add(i)
-                active_set.add(match)
-                candidates_from_y.remove(match)
-        else:  # i comes from y
-            assert i not in candidates_from_y  # TODO: we do not deal with that at the moment
-            match = self._find_best_match(i, candidates_from_x, active_set)
-            if match is None:
-                candidates_from_y.add(i)
-            else:
-                active_set.add(i)
-                active_set.add(match)
-                candidates_from_x.remove(match)
+        # Current distrib is `i`'s distrib, other distrib is the other one
+        d_candidates = {0: candidates_from_x, 1: candidates_from_y}
+        candidates_from_other_distrib = d_candidates[1 - self.sorted_distrib_indicator[i]]
+        candidates_from_current_distrib = d_candidates[self.sorted_distrib_indicator[i]]
+
+        assert i not in candidates_from_current_distrib  # TODO: we do not deal with that at the moment
+        match = self._find_best_match(i, candidates_from_other_distrib, active_set)
+        if match is None:
+            candidates_from_current_distrib.add(i)
+        else:
+            active_set.add(i)
+            active_set.add(match)
+            candidates_from_other_distrib.remove(match)
         return active_set, candidates_from_x, candidates_from_y
 
     def generate_solution_using_candidates(self, costs, ranks_xy):

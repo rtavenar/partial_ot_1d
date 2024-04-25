@@ -2,8 +2,6 @@ import numpy as np
 import warnings
 from sortedcontainers import SortedList
 
-EMPTY_GROUP_DICT = {"ends_at": None, "cost": None}
-
 class PartialOT1d:
     def __init__(self, max_iter) -> None:
         self.max_iter = max_iter
@@ -202,7 +200,7 @@ class PartialOT1d:
         elements from x as elements from y)
         """
         l_costs = []
-        self.group_starting_at = {}
+        self._group_starting_at = {}
         for i in range(len(diff_ranks)):
             # For each item in either distrib, find the scope of the smallest
             # "group" that would start at that point and extend on the right, 
@@ -222,7 +220,7 @@ class PartialOT1d:
                     cost = diff_cum_sum[next_pos]   - diff_cum_sum[i - 1]
                 # i: start of the "group", "next_pos": end of the "group", abs(cost): cost of the group
                 l_costs.append((i, next_pos, abs(cost)))
-                self.group_starting_at[i] = {"ends_at": next_pos, "cost": abs(cost)}
+                self._group_starting_at[i] = {"ends_at": next_pos, "cost": abs(cost)}
         return SortedList(l_costs, key=lambda x: x[2])
      
     @classmethod
@@ -282,9 +280,12 @@ class PartialOT1d:
         cost_for_pack = 0.
         i = idx_start
         while i < idx_end:
-            cost_for_pack += self.group_starting_at[i]["cost"]
-            i = self.group_starting_at[i]["ends_at"] + 1
+            cost_for_pack += self.get_group_starting_at(i)["cost"]
+            i = self.get_group_starting_at(i)["ends_at"] + 1
         return cost_for_pack
+    
+    def get_group_starting_at(self, i):
+        return self._group_starting_at.get(i, {"ends_at": None, "cost": None})
 
     def generate_solution_using_marginal_costs(self, costs: SortedList, ranks_xy):
         """Generate a solution from a sorted list of group costs.
@@ -340,8 +341,8 @@ class PartialOT1d:
             # with its associated marginal cost
             # 1. If (p_s - 1, p_e + 1) is a group: update its cost 
             #    (consider marginal cost only)
-            if self.group_starting_at.get(p_s - 1, EMPTY_GROUP_DICT)["ends_at"] == p_e + 1:
-                previous_cost = self.group_starting_at[p_s - 1]["cost"]
+            if self.get_group_starting_at(p_s - 1)["ends_at"] == p_e + 1:
+                previous_cost = self.get_group_starting_at(p_s - 1)["cost"]
                 cost_new_pack = self._compute_cost_for_pack(p_s, p_e)
                 marginal_cost = previous_cost - cost_new_pack
                 try:
@@ -355,8 +356,8 @@ class PartialOT1d:
             #    remove them and insert the overall group (p_s - 1, p_e + 1) 
             #    with the adequate marginal cost
             if self.sorted_distrib_indicator[p_s - 1] != self.sorted_distrib_indicator[p_e + 1]:
-                if (self.group_starting_at.get(p_s - 1, EMPTY_GROUP_DICT)["ends_at"] == p_s 
-                    and self.group_starting_at.get(p_e, EMPTY_GROUP_DICT)["ends_at"] == p_e + 1):
+                if (self.get_group_starting_at(p_s - 1)["ends_at"] == p_s 
+                    and self.get_group_starting_at(p_e)["ends_at"] == p_e + 1):
                     marginal_cost = (self._compute_cost_for_pack(p_s - 1, p_e + 1)
                                      - self._compute_cost_for_pack(p_s, p_e))
                     costs.add((p_s - 1, p_e + 1, marginal_cost))
@@ -430,27 +431,29 @@ class PartialOT1d:
         return self.indices_sort_x[sol_indices_x_sorted], self.indices_sort_y[sol_indices_y_sorted]
 
     def _print_current_status(self, active_set, i, j):
-        s = ""
+        print("=" * (15 + self.n_x + self.n_y) + "\nCurrent status")
+        s = "Distribs:      "
         for v in self.sorted_distrib_indicator:
             if v == 0:
                 s += "o"
             else:
                 s += "-"
         print(s)
-        s = ""
+        s = "Active set:    "
         for pos in range(self.n_x + self.n_y):
             if pos in active_set:
                 s += "x"
             else:
                 s += " "
         print(s)
-        s = ""
+        s = "Current group: "
         for pos in range(self.n_x + self.n_y):
             if pos in [i, j]:
                 s += "^"
             else:
                 s += " "
         print(s)
+        print("=" * (15 + self.n_x + self.n_y))
 
 if __name__ == "__main__":
     pb = PartialOT1d(max_iter=40)

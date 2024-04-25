@@ -201,6 +201,7 @@ class PartialOT1d:
         """
         l_costs = []
         self._group_starting_at = {}
+        self._group_ending_at = {}
         for i in range(len(diff_ranks)):
             # For each item in either distrib, find the scope of the smallest
             # "group" that would start at that point and extend on the right, 
@@ -221,7 +222,22 @@ class PartialOT1d:
                 # i: start of the "group", "next_pos": end of the "group", abs(cost): cost of the group
                 l_costs.append((i, next_pos, abs(cost)))
                 self._group_starting_at[i] = {"ends_at": next_pos, "cost": abs(cost)}
+                assert next_pos not in self._group_ending_at
+                self._group_ending_at[next_pos] = {"starts_at": i, "cost": abs(cost)}
         return SortedList(l_costs, key=lambda x: x[2])
+    
+    def precompute_pack_costs_cumsum(self):
+        # TODO: doctring
+        pack_costs_cumsum = {}
+        for i in range(self.n_x + self.n_y):
+            # If there is a group ending there
+            # (if not, this cannot be the end of a pack)
+            if i in self._group_ending_at:
+                start = self._group_ending_at[i]["starts_at"]
+                additional_cost = self._group_ending_at[i]["cost"]
+                pack_costs_cumsum[i] = pack_costs_cumsum.get(start - 1, 0) + additional_cost
+        return pack_costs_cumsum
+
      
     @classmethod
     def _insert_new_pack(cls, packs: SortedList, candidate_pack):
@@ -276,6 +292,8 @@ class PartialOT1d:
         included in the solution) ranging from `idx_start` to `idx_end` (both included).
         
         # TODO: unit tests
+        # TODO: rely on `precompute_pack_costs_cumsum` instead to reduce complexity 
+        # (should be O(1) since the cost for a pack should be `pack_costs_cumsum[end] - pack_costs_cumsum[start - 1]`)
         """
         cost_for_pack = 0.
         i = idx_start

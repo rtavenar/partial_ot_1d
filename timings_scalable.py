@@ -7,7 +7,7 @@ from scalable_partial import PartialOT1d
 np.random.seed(0)
 n_repeat = 10
 
-values_for_n = [10, 30, 100, 300, 1000, 3000, 10000]
+values_for_n =  [10, 30, 100, 300, 1000, 3000, 10000]
 timings = []
 
 for n in values_for_n:

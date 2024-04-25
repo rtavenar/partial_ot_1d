@@ -2,6 +2,8 @@ import numpy as np
 import warnings
 from sortedcontainers import SortedList
 
+EMPTY_GROUP_DICT = {"ends_at": None, "cost": None}
+
 class PartialOT1d:
     def __init__(self, max_iter) -> None:
         self.max_iter = max_iter
@@ -200,6 +202,7 @@ class PartialOT1d:
         elements from x as elements from y)
         """
         l_costs = []
+        self.group_starting_at = {}
         for i in range(len(diff_ranks)):
             # For each item in either distrib, find the scope of the smallest
             # "group" that would start at that point and extend on the right, 
@@ -219,175 +222,71 @@ class PartialOT1d:
                     cost = diff_cum_sum[next_pos]   - diff_cum_sum[i - 1]
                 # i: start of the "group", "next_pos": end of the "group", abs(cost): cost of the group
                 l_costs.append((i, next_pos, abs(cost)))
-        return sorted(l_costs, key=lambda x: x[2])[:self.max_iter]
-
-    def generate_solution(self, costs, ranks_xy):
-        """Generate a solution from a sorted list of group costs.
-        See the note in `compute_costs` docs for a definition of groups.
-
-        The solution is a pair of lists. The first list contains the indices from `sorted_x`
-        that are in the active set, and the second one contains the indices from `sorted_y`
-        that are in the active set.
-
-        AT THE MOMENT, THIS ONE DOES NOT WORK PROPERLY, SOMETIMES IT CANNOT EXTRACT CORRECT SOLUTIONS 
-        FROM GROUPS SORTED BY COSTS. USE `generate_solutions_using_candidates` instead
+                self.group_starting_at[i] = {"ends_at": next_pos, "cost": abs(cost)}
+        return SortedList(l_costs, key=lambda x: x[2])
+     
+    @classmethod
+    def _insert_new_pack(cls, packs: SortedList, candidate_pack):
+        """Insert the `candidate_pack` into the sorted list of `packs`.
+        `packs` is modified in-place and the pack in which the candidate 
+        is inserted is returned.
 
         Examples
         --------
-        >>> p = PartialOT1d(max_iter=2)
-        >>> x = [-2, 3.1, 5]
-        >>> y = [-1, 1, 3]
-        >>> p.preprocess(x, y)
-        >>> ranks_xy = p.compute_rank_differences()[0]
-        >>> p.generate_solution([(3, 4, 0.10000000000000009), (0, 1, 1.0)], ranks_xy)
-        (array([0, 1]), array([0, 2]))
+        >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
+        >>> PartialOT1d._insert_new_pack(packs, [5, 7])
+        [2, 9]
+        >>> packs # doctest: +ELLIPSIS
+        SortedKeyList([[2, 9]], key=<function <lambda> at ...>)
+        >>> 
+        >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
+        >>> PartialOT1d._insert_new_pack(packs, [11, 12])
+        [11, 12]
+        >>> packs # doctest: +ELLIPSIS
+        SortedKeyList([[2, 4], [8, 9], [11, 12]], key=<function <lambda> at ...>)
+        >>> 
+        >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
+        >>> PartialOT1d._insert_new_pack(packs, [5, 6])
+        [2, 6]
+        >>> packs # doctest: +ELLIPSIS
+        SortedKeyList([[2, 6], [8, 9]], key=<function <lambda> at ...>)
+        >>> 
+        >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
+        >>> PartialOT1d._insert_new_pack(packs, [6, 7])
+        [6, 9]
+        >>> packs # doctest: +ELLIPSIS
+        SortedKeyList([[2, 4], [6, 9]], key=<function <lambda> at ...>)
         """
-        iter_enters_solution = {}
-        for iter, (i, j, _) in enumerate(costs):
-            if i not in iter_enters_solution:
-                iter_enters_solution[i] = iter
-            if j not in iter_enters_solution:
-                iter_enters_solution[j] = iter
-        superset_of_active_set = sorted(iter_enters_solution.keys())
-
-        # Gather packs of adjacent points in `superset_of_active_set`
-        # The commented code below is buggy, so I moved to a simpler yet less efficient variant (see below)
-        # 
-        # idx_active = np.zeros((self.n_x + self.n_y + 1), dtype=int)
-        # idx_active[superset_of_active_set] = 1
-        # diff_idx = idx_active[1:] - idx_active[:-1]
-        # idx_start = np.where(diff_idx == 1)[0] + 1
-        # idx_end = np.where(diff_idx == -1)[0] + 1  # idx_end is excluded (first index outside the pack)
-        idx_start, idx_end = [], []
-        for i, pos in enumerate(superset_of_active_set):
-            if i == 0 or pos > superset_of_active_set[i-1] + 1:
-                idx_start.append(pos)
-            elif i == len(superset_of_active_set) - 1 or superset_of_active_set[i+1] > pos + 1:
-                idx_end.append(pos + 1)
-
-        # For each pack, remove extra points that prevent it from being an actual set of pairs
-        # for i, j in zip(idx_start, idx_end):
-        #     n_x_in_group = np.sum(self.sorted_distrib_indicator[i:j] == 0)
-        #     n_y_in_group = np.sum(self.sorted_distrib_indicator[i:j] == 1)
-        #     print("---", self.sorted_distrib_indicator[i:j], [iter_enters_solution.get(k, -1) for k in range(i, j)])
-        #     while n_x_in_group != n_y_in_group:
-        #         print(i, j, n_x_in_group, n_y_in_group)
-        #         if iter_enters_solution[i] < iter_enters_solution[j - 1]:
-        #             del iter_enters_solution[j - 1]
-        #             if self.sorted_distrib_indicator[j - 1] == 0:
-        #                 n_x_in_group -= 1
-        #             else: 
-        #                 n_y_in_group -= 1
-        #             j -= 1
-        #         elif iter_enters_solution[i] > iter_enters_solution[j - 1]:
-        #             del iter_enters_solution[i]
-        #             if self.sorted_distrib_indicator[i] == 0:
-        #                 n_x_in_group -= 1
-        #             else: 
-        #                 n_y_in_group -= 1
-        #             i -= 1
-        for i, j in zip(idx_start, idx_end):  # WE KNOW THIS DOES NOT ALWAYS WORK, WE WILL HAVE TO CHANGE THAT
-            if (j - i) % 2 != 0:
-                if iter_enters_solution[i] < iter_enters_solution[j - 1]:
-                    del iter_enters_solution[j - 1]
-                elif iter_enters_solution[i] > iter_enters_solution[j - 1]:
-                    del iter_enters_solution[i]
-
-        # Write down solution with remaining points
-        active_set = sorted(iter_enters_solution.keys())
-        ranks_active_set = ranks_xy[active_set]
-        which_distrib = self.sorted_distrib_indicator[active_set]
-
-        return ranks_active_set[which_distrib == 0], ranks_active_set[which_distrib == 1]
+        i, j = candidate_pack
+        idx = packs.bisect_left(candidate_pack)
+        # Is `i` adjacent to `packs[idx - 1]` 
+        # or `j` adjacent to `packs[idx]`?
+        if idx > 0 and packs[idx - 1][1] == i - 1:
+            # Extend the pack up to `j`
+            p = packs.pop(idx - 1)
+            candidate_pack = [p[0], candidate_pack[1]]
+        idx = packs.bisect_left(candidate_pack)
+        if idx < len(packs) and packs[idx][0] == j + 1:
+            # Extend the pack from `i` on
+            p = packs.pop(idx)
+            candidate_pack = [candidate_pack[0], p[1]]
+        packs.add(candidate_pack)
+        return candidate_pack
     
-    def _find_best_match(self, i: int, candidates: SortedList, active_set: set):
-        """Given a potential new candidate `i`, could it be matched with a candidate in the
-        sorted list `candidates` such that they would be part of a pack 
-        (set of contiguous indexes in the active set)?
-
-        If yes, the index of the match is returned.
-
-        TODO: if two matches are possible, we should return the best, 
-        which we don't do at the moment (we return the first one).
-
-        Examples
-        --------
-        >>> p = PartialOT1d(max_iter=-1)
-        >>> active_set = {1, 2, 3, 4}
-        >>> candidates = SortedList([0])
-        >>> p._find_best_match(6, candidates, active_set)  # None
-        >>> p._find_best_match(5, candidates, active_set)
-        0
-        """
-        potential_matches = []
-        next_pos = candidates.bisect_right(i)
-        my_candidates = []
-        if next_pos > 0:
-            my_candidates.append(candidates[next_pos - 1])
-        if next_pos <= len(candidates) - 1:
-            my_candidates.append(candidates[next_pos])
-        for cand in my_candidates:
-            # TODO: find out why a candidate can be in the active_set
-            assert cand not in active_set
-            can_match_with_i = True
-            for pos in range(min(i, cand) + 1, max(i, cand)):
-                if pos not in active_set:
-                    can_match_with_i = False
-                    break
-            if can_match_with_i:
-                potential_matches.append(cand)
-        if len(potential_matches) > 0:
-            # TODO: check which match is the best here 
-            # if there are two potential matches
-            return potential_matches[0]
-    
-    def _match_candidates(self, i: int, active_set: set, candidates_from_x: SortedList, candidates_from_y: SortedList):
-        """Given a potential new candidate `i`, could it be matched with a candidate in the
-        sorted list `candidates` corresponding to the other distrib such that they would be part 
-        of a pack (set of contiguous indexes in the active set)?
-
-        If yes, the new candidate and its match are added to the active set.
-        If not, the new candidate is added to the corresponding sorted list of candidates.        
+    def _compute_cost_for_pack(self, idx_start, idx_end):
+        """Compute the associated cost for a pack (set of contiguous points
+        included in the solution) ranging from `idx_start` to `idx_end` (both included).
         
-        TODO: Important question we do not deal with at the moment: could there be a cascade of 
-        candidate matchings?
-        Like if we match two points i and j that were candidates, that creates a new pack from i to j (at least).
-        If i-1 and j+1 are candidates not coming from the same distrib, we should probably add them too. 
-        Or is it impossible? It might be impossible, but we still need to prove it.
-
-        Examples
-        --------
-        >>> p = PartialOT1d(max_iter=2)
-        >>> x = [-0.5, 3.1, 5]
-        >>> y = [-1, 1, 3]
-        >>> p.preprocess(x, y)
-        >>> active_set = {1, 2, 3, 4}
-        >>> candidates_from_x = SortedList([])
-        >>> candidates_from_y = SortedList([0])
-        >>> a_s, cand_x, cand_y = p._match_candidates(5, active_set, candidates_from_x, candidates_from_y)  # None
-        >>> a_s
-        {0, 1, 2, 3, 4, 5}
-        >>> cand_x
-        SortedList([])
-        >>> cand_y
-        SortedList([])
+        # TODO: unit tests
         """
-        # Current distrib is `i`'s distrib, other distrib is the other one
-        d_candidates = {0: candidates_from_x, 1: candidates_from_y}
-        candidates_from_other_distrib = d_candidates[1 - self.sorted_distrib_indicator[i]]
-        candidates_from_current_distrib = d_candidates[self.sorted_distrib_indicator[i]]
+        cost_for_pack = 0.
+        i = idx_start
+        while i < idx_end:
+            cost_for_pack += self.group_starting_at[i]["cost"]
+            i = self.group_starting_at[i]["ends_at"] + 1
+        return cost_for_pack
 
-        assert i not in candidates_from_current_distrib  # TODO: we do not deal with that at the moment
-        match = self._find_best_match(i, candidates_from_other_distrib, active_set)
-        if match is None:
-            candidates_from_current_distrib.add(i)
-        else:
-            active_set.add(i)
-            active_set.add(match)
-            candidates_from_other_distrib.remove(match)
-        return active_set, candidates_from_x, candidates_from_y
-
-    def generate_solution_using_candidates(self, costs, ranks_xy):
+    def generate_solution_using_marginal_costs(self, costs: SortedList, ranks_xy):
         """Generate a solution from a sorted list of group costs.
         See the note in `compute_costs` docs for a definition of groups.
 
@@ -397,46 +296,70 @@ class PartialOT1d:
 
         Examples
         --------
-        >>> p = PartialOT1d(max_iter=2)
+        >>> p = PartialOT1d(max_iter=3)
         >>> x = [1, 2, 5, 6]
         >>> y = [3, 4, 11, 12]
         >>> p.preprocess(x, y)
+        >>> diff_cum_sum = p.compute_cumulative_sum_differences()
+        >>> ranks_xy, diff_ranks, d_cumranks_indices = p.compute_rank_differences()
+        >>> costs = p.compute_costs(diff_cum_sum, diff_ranks, d_cumranks_indices)
         >>> ranks_xy = p.compute_rank_differences()[0]
-        >>> p.generate_solution_using_candidates([(1, 2, 1.0), (3, 4, 1.0)], ranks_xy)
-        (array([1, 2]), array([0, 1]))
-        >>> p.generate_solution_using_candidates([(1, 2, 1.0), (3, 4, 1.0), (2, 5, 4.0)], ranks_xy)
-        (array([1, 2]), array([0, 1]))
-        >>> p.generate_solution_using_candidates([(1, 2, 1.0), (3, 4, 1.0), (2, 5, 4.0), (0, 3, 4.0), (5, 6, 5.0)], ranks_xy)
+        >>> p.generate_solution_using_marginal_costs(costs, ranks_xy)
         (array([1, 2, 3]), array([0, 1, 2]))
         """
         active_set = set()
-        # We use sorted lists below so that it is not too costly to 
-        # find neighbouring candidates for a new candidate
-        candidates_x = SortedList()
-        candidates_y = SortedList()
-        for i, j, c in costs:
-            if i not in active_set and j not in active_set:
+        packs = SortedList(key=lambda t: t[0])
+        # print(costs)
+        while len(costs) > 0 and self.max_iter > len(active_set) // 2:
+            i, j, c = costs.pop(index=0)
+            if i in active_set or j in active_set:
+                continue
+            new_pack = None
+            # Case 1: j == i + 1 => "Simple" insert
+            if j == i + 1:
                 active_set.add(i)
                 active_set.add(j)
-                for idx in [i, j]:
-                    for candidate_list in [candidates_x, candidates_y]:        
-                        if idx in candidate_list:
-                            candidate_list.remove(idx)
-            elif i not in active_set:
-                # Check if a candidate can be matched with i
-                active_set, candidates_x, candidates_y = self._match_candidates(i, 
-                                                                                active_set, 
-                                                                                candidates_x, 
-                                                                                candidates_y)                
-            elif j not in active_set:
-                # Check if a candidate can be matched with j
-                active_set, candidates_x, candidates_y = self._match_candidates(j, 
-                                                                                active_set, 
-                                                                                candidates_x, 
-                                                                                candidates_y)
+                new_pack = PartialOT1d._insert_new_pack(packs, [i, j])
+            # Case 2: insert a group that contains a pack
+            elif [i + 1, j - 1] in packs:
+                active_set.add(i)
+                active_set.add(j)
+                packs.remove([i + 1, j - 1])
+                new_pack = PartialOT1d._insert_new_pack(packs, [i, j])
+            # There should be no "Case 3"
             else:
-                # Not sure why, but we sometimes end here...
-                pass
+                self._print_current_status(active_set, i, j)
+                raise ValueError
+            
+            # We now need to update the groups wrt the pack we have just created
+            p_s, p_e = new_pack
+            if p_s == 0 or p_e == self.n_x + self.n_y - 1:
+                continue
+            # TODO below: 1. and 2. are cases where we need to remove stuff from the list `costs`
+            # but it seems that **in all cases** (p_s - 1, p_e + 1) should be added as a new "group or pack"
+            # with its associated marginal cost
+            # 1. If (p_s - 1, p_e + 1) is a group: update its cost 
+            #    (consider marginal cost only)
+            if self.group_starting_at.get(p_s - 1, EMPTY_GROUP_DICT)["ends_at"] == p_e + 1:
+                previous_cost = self.group_starting_at[p_s - 1]["cost"]
+                cost_new_pack = self._compute_cost_for_pack(p_s, p_e)
+                marginal_cost = previous_cost - cost_new_pack
+                try:
+                    costs.remove((p_s - 1, p_e + 1, previous_cost))
+                    costs.add((p_s - 1, p_e + 1, marginal_cost))
+                except:
+                    print(costs)
+                    costs.remove(-1)
+
+            # 2. If (p_s - 1, p_s) and (p_e, p_e + 1) are matching groups, 
+            #    remove them and insert the overall group (p_s - 1, p_e + 1) 
+            #    with the adequate marginal cost
+            if self.sorted_distrib_indicator[p_s - 1] != self.sorted_distrib_indicator[p_e + 1]:
+                if (self.group_starting_at.get(p_s - 1, EMPTY_GROUP_DICT)["ends_at"] == p_s 
+                    and self.group_starting_at.get(p_e, EMPTY_GROUP_DICT)["ends_at"] == p_e + 1):
+                    marginal_cost = (self._compute_cost_for_pack(p_s - 1, p_e + 1)
+                                     - self._compute_cost_for_pack(p_s, p_e))
+                    costs.add((p_s - 1, p_e + 1, marginal_cost))
 
         # Generate active_set as sorted set of indexes
         active_set = sorted(active_set)
@@ -498,14 +421,36 @@ class PartialOT1d:
         costs = self.compute_costs(diff_cum_sum, diff_ranks, d_cumranks_indices)
 
         # Generate solution from sorted costs
-        sol_indices_x_sorted, sol_indices_y_sorted = self.generate_solution_using_candidates(costs, ranks_xy)
+        # sol_indices_x_sorted, sol_indices_y_sorted = self.generate_solution_using_candidates(costs, ranks_xy)
+        sol_indices_x_sorted, sol_indices_y_sorted = self.generate_solution_using_marginal_costs(costs, ranks_xy)
 
         self.check_solution_valid(sol_indices_x_sorted, sol_indices_y_sorted)
 
         # Convert back into indices in original `x` and `y` distribs
         return self.indices_sort_x[sol_indices_x_sorted], self.indices_sort_y[sol_indices_y_sorted]
 
-
+    def _print_current_status(self, active_set, i, j):
+        s = ""
+        for v in self.sorted_distrib_indicator:
+            if v == 0:
+                s += "o"
+            else:
+                s += "-"
+        print(s)
+        s = ""
+        for pos in range(self.n_x + self.n_y):
+            if pos in active_set:
+                s += "x"
+            else:
+                s += " "
+        print(s)
+        s = ""
+        for pos in range(self.n_x + self.n_y):
+            if pos in [i, j]:
+                s += "^"
+            else:
+                s += " "
+        print(s)
 
 if __name__ == "__main__":
     pb = PartialOT1d(max_iter=40)

@@ -29,7 +29,6 @@ for i in range(n):
     plt.subplot(3, 4, i + 1)
     plot_distrib(x, y=.5, color="orange")
     plot_distrib(y, y=0, color="navy")
-    print(f"Iteration {i + 1} (i={i})")
     plot_matches(x[indices_x[:i + 1]], y[indices_y[:i + 1]])
     plt.xticks([])
     plt.yticks([])

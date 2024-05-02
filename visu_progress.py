@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from partial import partial_ot_1d
+from partial import PartialOT1d
 
 
 def plot_distrib(points, y=0, color="k"):
@@ -9,12 +9,11 @@ def plot_distrib(points, y=0, color="k"):
     plt.scatter(points, [y] * len(points), s=30, color=color)
 
 
-def plot_matches(groups, x, y):
-    for g in groups:
-        # print(g)
-        for i, j in zip(range(g.i_x, g.i_x + g.length), range(g.i_y, g.i_y + g.length)):
-            # print(i, j)
-            plt.plot([x[i], y[j]], [0.5, 0.], color="k", zorder=-1)
+def plot_matches(x, y):
+    x_s = np.sort(x)
+    y_s = np.sort(y)
+    for x_i, y_j in zip(x_s, y_s):
+        plt.plot([x_i, y_j], [0.5, 0.], color="k", zorder=-1)
 
 
 np.random.seed(0)
@@ -23,7 +22,7 @@ x = np.random.rand(n)
 x.sort()
 y = np.random.rand(n)
 y.sort()
-solutions = partial_ot_1d(x, y)
+indices_x, indices_y, costs = PartialOT1d(max_iter=n).fit(x, y)
     
 plt.figure(figsize=(12, 4))
 for i in range(n):
@@ -31,7 +30,7 @@ for i in range(n):
     plot_distrib(x, y=.5, color="orange")
     plot_distrib(y, y=0, color="navy")
     print(f"Iteration {i + 1} (i={i})")
-    plot_matches(solutions[i], x, y)
+    plot_matches(x[indices_x[:i + 1]], y[indices_y[:i + 1]])
     plt.xticks([])
     plt.yticks([])
     plt.title(f"Iteration {i + 1}")

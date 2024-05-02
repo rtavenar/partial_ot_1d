@@ -410,6 +410,29 @@ class PartialOT1d:
         3. Extraction of groups
         4. Generate and return solution
 
+        Note that the indices in `indices_x` and `indices_y` are ordered wrt their order of
+        appearance in the solution such that `indices_x[:10]` (resp y) is the set of indices
+        from x (resp. y) for the partial problem of size 10.
+
+        Arguments
+        ---------
+        x : array-like of shape (n, )
+            First distrib to be considered (weights are considered uniform)
+        y : array-like of shape (n, )
+            Second distrib to be considered (weights are considered uniform)
+
+        Returns
+        -------
+        indices_x : np.ndarray of shape (self.max_iter, ) or (n, )
+            Indices of elements from the x distribution to be included in the partial solutions
+            Order of appearance in this array indicates order of inclusion in the solution
+        indices_y : np.ndarray of shape (self.max_iter, ) or (n, )
+            Indices of elements from the x distribution to be included in the partial solutions
+            Order of appearance in this array indicates order of inclusion in the solution
+        list_marginal_costs : list of length self.max_iter or n
+            List of marginal costs associated to the intermediate partial problems
+            `np.cumsum(list_marginal_costs)` gives the corresponding total costs for intermediate partial problems
+
         Examples
         --------
         >>> p = PartialOT1d(max_iter=2)

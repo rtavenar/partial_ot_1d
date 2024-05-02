@@ -19,9 +19,7 @@ def plot_matches(x, y):
 np.random.seed(0)
 n = 12
 x = np.random.rand(n)
-x.sort()
 y = np.random.rand(n)
-y.sort()
 indices_x, indices_y, costs = PartialOT1d(max_iter=n).fit(x, y)
     
 plt.figure(figsize=(12, 4))

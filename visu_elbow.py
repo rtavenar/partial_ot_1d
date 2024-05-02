@@ -11,7 +11,10 @@ x = np.random.rand(n, ) + ind_outliers * 3
 np.random.shuffle(ind_outliers)
 y = np.random.rand(n, ) - ind_outliers * 3
 indices_x, indices_y, marginal_costs = pb.fit(x, y)
+cum_costs = np.cumsum(marginal_costs)
 
-plt.bar(x=np.arange(1, n + 1), height=np.cumsum(marginal_costs))
-plt.title(f"Total costs after each iteration of the partial OT algorithm in 1D ({np.sum(ind_outliers)} outliers in x and y here)")
+n_outliers = np.sum(ind_outliers)
+plt.bar(x=np.arange(1, n - n_outliers + 1), height=cum_costs[0:n - n_outliers])
+plt.bar(x=np.arange(n - n_outliers + 1, n + 1), height=cum_costs[n - n_outliers:], color="red")
+plt.title(f"Total costs after each iteration of the partial OT algorithm in 1D\n({n_outliers} outliers in x and y here)")
 plt.show()

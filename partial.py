@@ -220,14 +220,21 @@ class PartialOT1d:
                 else:
                     cost = diff_cum_sum[next_pos]   - diff_cum_sum[i - 1]
                 # i: start of the "group", "next_pos": end of the "group", abs(cost): cost of the group
-                l_costs.append((i, next_pos, abs(cost)))
+                if next_pos == i + 1:
+                    l_costs.append((i, next_pos, abs(cost)))
                 self._group_starting_at[i] = {"ends_at": next_pos, "cost": abs(cost)}
                 assert next_pos not in self._group_ending_at
                 self._group_ending_at[next_pos] = {"starts_at": i, "cost": abs(cost)}
         return SortedList(l_costs, key=lambda x: x[2]), self.precompute_pack_costs_cumsum()
     
     def precompute_pack_costs_cumsum(self):
-        # TODO: docstring
+        """For each position `i` at which a pack could end,
+        Compute (using dynamic programming and the costs of groups that have been precomputed)
+        the cost of the largest pack ending at `i`.
+
+        This is useful because this can be used later, to compute the cost of any pack in O(1)
+        (cf. `_compute_cost_for_pack`).
+        """
         pack_costs_cumsum = {}
         for i in range(self.n_x + self.n_y):
             # If there is a group ending there
@@ -290,8 +297,6 @@ class PartialOT1d:
     def _compute_cost_for_pack(self, idx_start, idx_end, pack_costs_cumsum):
         """Compute the associated cost for a pack (set of contiguous points
         included in the solution) ranging from `idx_start` to `idx_end` (both included).
-        
-        # TODO: unit tests
         """
         return pack_costs_cumsum[idx_end] - pack_costs_cumsum.get(idx_start - 1, 0)
     
@@ -317,11 +322,12 @@ class PartialOT1d:
         >>> costs, pack_costs_cumsum = p.compute_costs(diff_cum_sum, diff_ranks, d_cumranks_indices)
         >>> ranks_xy = p.compute_rank_differences()[0]
         >>> p.generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum)
-        (array([1, 2, 3]), array([0, 1, 2]))
+        (array([1, 2, 3]), array([0, 1, 2]), [1, 1, 5])
         """
         active_set = set()
         packs = SortedList(key=lambda t: t[0])
         list_marginal_costs = []
+        list_active_set_inserts = []
         while len(costs) > 0 and self.max_iter > len(active_set) // 2:
             i, j, c = costs.pop(index=0)
             if i in active_set or j in active_set:
@@ -329,34 +335,25 @@ class PartialOT1d:
             new_pack = None
             # Case 1: j == i + 1 => "Simple" insert
             if j == i + 1:
-                active_set.add(i)
-                active_set.add(j)
                 new_pack = PartialOT1d._insert_new_pack(packs, [i, j])
             # Case 2: insert a group that contains a pack
             elif [i + 1, j - 1] in packs:
-                active_set.add(i)
-                active_set.add(j)
                 packs.remove([i + 1, j - 1])
                 new_pack = PartialOT1d._insert_new_pack(packs, [i, j])
             # There should be no "Case 3"
             else:
                 self._print_current_status(active_set, i, j)
                 raise ValueError
+            active_set.update({i, j})
+            list_active_set_inserts.append({i, j})
             list_marginal_costs.append(c)
             
             # We now need to update the groups wrt the pack we have just created
             p_s, p_e = new_pack
             if p_s == 0 or p_e == self.n_x + self.n_y - 1:
                 continue
-            # 1. If (p_s - 1, p_e + 1) is a group: remove it (it will be re-inserted later)
-            if self.get_group_starting_at(p_s - 1)["ends_at"] == p_e + 1:
-                previous_cost = self.get_group_starting_at(p_s - 1)["cost"]
-                costs.remove((p_s - 1, p_e + 1, previous_cost))
-
-            # 2. If (p_s - 1, p_s) and (p_e, p_e + 1) are matching groups, 
-            #    remove them and insert the overall group (p_s - 1, p_e + 1) 
-            #    with the adequate marginal cost
             if self.sorted_distrib_indicator[p_s - 1] != self.sorted_distrib_indicator[p_e + 1]:
+                # If (p_s - 1, p_s) and (p_e, p_e + 1) are groups, remove them
                 if (self.get_group_starting_at(p_s - 1)["ends_at"] == p_s 
                         and self.get_group_starting_at(p_e)["ends_at"] == p_e + 1):
                     # Below we use discard instead of remove (discard does not throw an error
@@ -368,17 +365,18 @@ class PartialOT1d:
 
                 # Insert (p_s - 1, p_e + 1) as a new pseudo-group with marginal cost
                 marginal_cost = (self._compute_cost_for_pack(p_s - 1, p_e + 1, pack_costs_cumsum)
-                                - self._compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
+                                 - self._compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
                 costs.add((p_s - 1, p_e + 1, marginal_cost))
 
-        # Generate active_set as sorted set of indexes
-        active_set = sorted(active_set)
+        # Generate index arrays in the order of insertion in the active set
+        indices_sorted_x = np.array([ranks_xy[i] 
+                                     if self.sorted_distrib_indicator[i] == 0 else ranks_xy[j] 
+                                     for i, j in list_active_set_inserts])
+        indices_sorted_y = np.array([ranks_xy[i] 
+                                     if self.sorted_distrib_indicator[i] == 1 else ranks_xy[j] 
+                                     for i, j in list_active_set_inserts])
 
-        # Write down solution with remaining points
-        ranks_active_set = ranks_xy[active_set]
-        which_distrib = self.sorted_distrib_indicator[active_set]
-
-        return ranks_active_set[which_distrib == 0], ranks_active_set[which_distrib == 1], list_marginal_costs
+        return (indices_sorted_x, indices_sorted_y, list_marginal_costs)
     
     def check_solution_valid(self, indices_x, indices_y):
         """Check that a solution (given by two lists of indices in 
@@ -415,10 +413,10 @@ class PartialOT1d:
         Examples
         --------
         >>> p = PartialOT1d(max_iter=2)
-        >>> x = [5, -2, 3.1]
+        >>> x = [5, -2, 4]
         >>> y = [-1, 1, 3]
         >>> p.fit(x, y)
-        (array([1, 2]), array([0, 2]))
+        (array([1, 2]), array([0, 2]), [1, 1])
         """
         # Sort distribs and keep track of their original indices (stored in instance attributes)
         self.preprocess(x, y)

@@ -10,9 +10,9 @@ def plot_distrib(points, y=0, color="k"):
 
 
 def plot_matches(x, y):
-    x_s = np.sort(x)
-    y_s = np.sort(y)
-    for x_i, y_j in zip(x_s, y_s):
+    sorted_x = np.sort(x)
+    sorted_y = np.sort(y)
+    for x_i, y_j in zip(sorted_x, sorted_y):
         plt.plot([x_i, y_j], [0.5, 0.], color="k", zorder=-1)
 
 

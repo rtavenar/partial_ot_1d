@@ -9,25 +9,28 @@ class SlicedPartialOT:
         self.max_iter_partial = max_iter_partial
         self.partial_problem = PartialOT1d(self.max_iter_partial)
 
-    def project_in_1d(self, x, y):
-        assert x.shape[1] == y.shape[1]
-        d = x.shape[1]
+    def draw_direction(self, d):
         w = np.random.randn(d)
+        return w
+
+    def project_in_1d(self, x, y, w):
+        w /= np.linalg.norm(w)
         proj_x = np.dot(x, w)
         proj_y = np.dot(y, w)
-        return proj_x, proj_y, w
+        return proj_x, proj_y
 
 
 class MonteCarloSlicedPartialOT(SlicedPartialOT):
     def fit(self, x, y):
-        assert x.shape[0] == y.shape[0]
-        n = x.shape[0]
+        assert x.shape[:2] == y.shape[:2]
+        n, d = x.shape[:2]
 
         selection_freq_x = np.zeros((n, ))
         selection_freq_y = np.zeros((n, ))
         avg_cost = 0.
         for _ in range(self.n_proj):
-            proj_x, proj_y = self.project_in_1d(x, y)[:2]
+            w = self.draw_direction(d)
+            proj_x, proj_y = self.project_in_1d(x, y, w)
             ind_x, ind_y, marginal_costs = self.partial_problem.fit(proj_x, proj_y)
             selection_freq_x[ind_x] += 1.
             selection_freq_y[ind_y] += 1.
@@ -38,12 +41,14 @@ class MonteCarloSlicedPartialOT(SlicedPartialOT):
 
 class MaheySlicedPartialOT(SlicedPartialOT):
     def fit(self, x, y):
-        assert x.shape[0] == y.shape[0]
+        assert x.shape[:2] == y.shape[:2]
+        n, d = x.shape[:2]
 
         min_cost = np.inf
         bool_indices_x, bool_indices_y = None, None
         for _ in range(self.n_proj):
-            proj_x, proj_y = self.project_in_1d(x, y)[:2]
+            w = self.draw_direction(d)
+            proj_x, proj_y = self.project_in_1d(x, y, w)
             ind_x, ind_y, _ = self.partial_problem.fit(proj_x, proj_y)
 
             sorted_ind_x = np.sort(ind_x)
@@ -55,14 +60,15 @@ class MaheySlicedPartialOT(SlicedPartialOT):
             if cost < min_cost:
                 bool_indices_x = np.array([(i in ind_x) for i in range(n)], dtype=bool)
                 bool_indices_y = np.array([(i in ind_y) for i in range(n)], dtype=bool)
+                min_cost = cost
         
         return min_cost, bool_indices_x, bool_indices_y
 
 
 
 if __name__ == "__main__":
-    n = 30
-    d = 20
+    n = 100
+    d = 50
     n_outliers = 10
     np.random.seed(0)
 
@@ -86,7 +92,8 @@ if __name__ == "__main__":
     print(freq_y[outliers_y])
     
     sliced = MaheySlicedPartialOT(n_proj=100, max_iter_partial=n-n_outliers)
-    _, bool_ind_x, bool_ind_y = sliced.fit(x, y)
+    min_cost, bool_ind_x, bool_ind_y = sliced.fit(x, y)
+    print(min_cost)
     print("x")
     print(np.sum(bool_ind_x), np.sum(bool_ind_x[outliers_x]))
     print("y")

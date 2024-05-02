@@ -86,10 +86,8 @@ if __name__ == "__main__":
     print(freq_y[outliers_y])
     
     sliced = MaheySlicedPartialOT(n_proj=100, max_iter_partial=n-n_outliers)
-    _, freq_x, freq_y = sliced.fit(x, y)
+    _, bool_ind_x, bool_ind_y = sliced.fit(x, y)
     print("x")
-    print(freq_x)
-    print(freq_x[outliers_x])
+    print(np.sum(bool_ind_x), np.sum(bool_ind_x[outliers_x]))
     print("y")
-    print(freq_y)
-    print(freq_y[outliers_y])
+    print(np.sum(bool_ind_y), np.sum(bool_ind_y[outliers_y]))

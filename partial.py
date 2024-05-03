@@ -2,8 +2,6 @@ import numpy as np
 import warnings
 from sortedcontainers import SortedList
 
-# TODO: check + implement squared cost (even though it will be slow)
-
 class PartialOT1d:
     def __init__(self, max_iter) -> None:
         self.max_iter = max_iter

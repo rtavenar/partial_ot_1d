@@ -212,6 +212,8 @@ class PartialOT1d:
                 target_rank = cur_rank - 1
             else:
                 target_rank = cur_rank + 1
+            # TODO here: no need for d_cumranks_indices, just iterate over the indices and store
+            # them in a dict that will be updated online
             list_positions = d_cumranks_indices.get(target_rank, [])
             next_pos = self._binary_search(list_positions, i)
             if next_pos is not None:

@@ -45,29 +45,6 @@ class PartialOT1d:
 
         idx = np.concatenate((np.zeros(self.n_x, dtype=int), np.ones(self.n_y, dtype=int)))
         self.sorted_distrib_indicator = idx[self.indices_sort_xy]
-    
-    def _binary_search(self, arr, target):
-        """Return the first element in `arr` that is strictly greater than `target` 
-        (returns `None` if all elements in `arr` are lower or equal than `target`).
-        
-        Note that `arr` is assumed to be sorted.
-
-        Examples
-        --------
-        >>> p = PartialOT1d(-1)
-        >>> p._binary_search([0, 2, 4, 5, 7], 4)
-        5
-        >>> p._binary_search([0, 2, 4], 4)  # None
-        >>> p._binary_search([], 4)         # None
-        """
-        left, right = 0, len(arr) - 1
-        while left <= right:
-            mid = (left + right) // 2
-            if arr[mid] <= target:
-                left = mid + 1
-            else:
-                right = mid - 1
-        return arr[left] if left < len(arr) else None
 
     def _insert_constant_values(self, arr, distrib_index):
         """Takes `arr` as input. For each position `i` in `arr`, 
@@ -183,13 +160,9 @@ class PartialOT1d:
 
         diff_ranks = ranks_xy_x_cum - ranks_xy_y_cum
 
-        d_cumranks_indices = {}
-        for i in range(self.n_x + self.n_y):
-            d_cumranks_indices[diff_ranks[i]] = d_cumranks_indices.get(diff_ranks[i], []) + [i]
-
-        return ranks_xy, diff_ranks, d_cumranks_indices
+        return ranks_xy, diff_ranks
     
-    def compute_costs(self, diff_cum_sum, diff_ranks, d_cumranks_indices):
+    def compute_costs(self, diff_cum_sum, diff_ranks):
         """For each element in sorted `x`, compute its group (cf note below).
         Then compute the cost for each group and sort all groups in increasing 
         cost order.
@@ -202,20 +175,19 @@ class PartialOT1d:
         l_costs = []
         self._group_starting_at = {}
         self._group_ending_at = {}
+        last_pos_for_rank = {}
         for i in range(len(diff_ranks)):
             # For each item in either distrib, find the scope of the smallest
             # "group" that would start at that point and extend on the right, 
             # if one exists, and store the cost of this "group" by relying 
             # on differences of cumulative sums
             cur_rank = diff_ranks[i]
+            last_pos_for_rank[cur_rank] = i
             if self.sorted_distrib_indicator[i] == 0:
                 target_rank = cur_rank - 1
             else:
                 target_rank = cur_rank + 1
-            # TODO here: no need for d_cumranks_indices, just iterate over the indices and store
-            # them in a dict that will be updated online
-            list_positions = d_cumranks_indices.get(target_rank, [])
-            next_pos = self._binary_search(list_positions, i)
+            next_pos = last_pos_for_rank.get(target_rank, None)
             if next_pos is not None:
                 if i == 0:
                     cost = diff_cum_sum[next_pos] # - 0
@@ -448,10 +420,10 @@ class PartialOT1d:
 
         # Precompute useful quantities
         diff_cum_sum = self.compute_cumulative_sum_differences()
-        ranks_xy, diff_ranks, d_cumranks_indices = self.compute_rank_differences()
+        ranks_xy, diff_ranks = self.compute_rank_differences()
 
         # Compute costs for "groups"
-        costs, pack_costs_cumsum = self.compute_costs(diff_cum_sum, diff_ranks, d_cumranks_indices)
+        costs, pack_costs_cumsum = self.compute_costs(diff_cum_sum, diff_ranks)
 
         # Generate solution from sorted costs
         sol_indices_x_sorted, sol_indices_y_sorted, sol_costs = self.generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum)

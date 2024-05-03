@@ -138,13 +138,11 @@ class PartialOT1d:
         >>> x = [-2, 2, 3]
         >>> y = [-1, 1, 5]
         >>> p.preprocess(x, y)
-        >>> ranks_xy, diff_ranks, d_cumranks_indices = p.compute_rank_differences()
+        >>> ranks_xy, diff_ranks = p.compute_rank_differences()
         >>> ranks_xy
         array([0, 0, 1, 1, 2, 2])
         >>> diff_ranks
         array([ 1,  0, -1,  0,  1,  0])
-        >>> d_cumranks_indices
-        {1: [0, 4], 0: [1, 3, 5], -1: [2]}
         """
         ranks_x, ranks_y = np.arange(self.n_x), np.arange(self.n_y)
         ranks_xy = np.concatenate((ranks_x, ranks_y))
@@ -173,34 +171,50 @@ class PartialOT1d:
         points (starting at x_i and extending to the right) that one should 
         take to get a balanced set (ie. a set in which we have as many 
         elements from x as elements from y)
+
+        Examples
+        --------
+        >>> p = PartialOT1d(max_iter=3)
+        >>> x = [1, 2, 5, 6]
+        >>> y = [3, 4, 11, 12]
+        >>> p.preprocess(x, y)
+        >>> diff_cum_sum = p.compute_cumulative_sum_differences()
+        >>> ranks_xy, diff_ranks = p.compute_rank_differences()
+        >>> costs, pack_costs_cumsum = p.compute_costs(diff_cum_sum, diff_ranks)
+        >>> list(costs)
+        [(1, 2, 1), (3, 4, 1), (5, 6, 5)]
         """
         l_costs = []
         self._group_starting_at = {}
         self._group_ending_at = {}
-        last_pos_for_rank = {}
+        last_pos_for_rank_x = {}
+        last_pos_for_rank_y = {}
         for i in range(len(diff_ranks)):
             # For each item in either distrib, find the scope of the smallest
             # "group" that would start at that point and extend on the right, 
             # if one exists, and store the cost of this "group" by relying 
             # on differences of cumulative sums
+            idx_end = i
             cur_rank = diff_ranks[i]
-            last_pos_for_rank[cur_rank] = i
             if self.sorted_distrib_indicator[i] == 0:
                 target_rank = cur_rank - 1
+                idx_start = last_pos_for_rank_y.get(target_rank, None)
+                last_pos_for_rank_x[cur_rank] = i
             else:
                 target_rank = cur_rank + 1
-            next_pos = last_pos_for_rank.get(target_rank, None)
-            if next_pos is not None:
-                if i == 0:
-                    cost = diff_cum_sum[next_pos] # - 0
+                idx_start = last_pos_for_rank_x.get(target_rank, None)
+                last_pos_for_rank_y[cur_rank] = i
+            if idx_start is not None:
+                if idx_start == 0:
+                    cost = diff_cum_sum[idx_end] # - 0
                 else:
-                    cost = diff_cum_sum[next_pos]   - diff_cum_sum[i - 1]
+                    cost = diff_cum_sum[idx_end]   - diff_cum_sum[idx_start - 1]
                 # i: start of the "group", "next_pos": end of the "group", abs(cost): cost of the group
-                if next_pos == i + 1:
-                    l_costs.append((i, next_pos, abs(cost)))
-                self._group_starting_at[i] = {"ends_at": next_pos, "cost": abs(cost)}
-                assert next_pos not in self._group_ending_at
-                self._group_ending_at[next_pos] = {"starts_at": i, "cost": abs(cost)}
+                if idx_end == idx_start + 1:
+                    l_costs.append((idx_start, idx_end, abs(cost)))
+                self._group_starting_at[idx_start] = {"ends_at": idx_end, "cost": abs(cost)}
+                assert idx_end not in self._group_ending_at
+                self._group_ending_at[idx_end] = {"starts_at": idx_start, "cost": abs(cost)}
         return SortedList(l_costs, key=lambda x: x[2]), self.precompute_pack_costs_cumsum()
     
     def precompute_pack_costs_cumsum(self):
@@ -294,8 +308,8 @@ class PartialOT1d:
         >>> y = [3, 4, 11, 12]
         >>> p.preprocess(x, y)
         >>> diff_cum_sum = p.compute_cumulative_sum_differences()
-        >>> ranks_xy, diff_ranks, d_cumranks_indices = p.compute_rank_differences()
-        >>> costs, pack_costs_cumsum = p.compute_costs(diff_cum_sum, diff_ranks, d_cumranks_indices)
+        >>> ranks_xy, diff_ranks = p.compute_rank_differences()
+        >>> costs, pack_costs_cumsum = p.compute_costs(diff_cum_sum, diff_ranks)
         >>> ranks_xy = p.compute_rank_differences()[0]
         >>> p.generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum)
         (array([1, 2, 3]), array([0, 1, 2]), [1, 1, 5])

@@ -78,12 +78,12 @@ if __name__ == "__main__":
 
     outliers_x = np.random.choice(n, size=n_outliers, replace=False)
     ind_outliers_x = np.zeros((n, d))
-    ind_outliers_x[outliers_x] = 3.
+    ind_outliers_x[outliers_x] = 10.
     x = np.random.rand(n, d) + ind_outliers_x
 
     outliers_y = np.random.choice(n, size=n_outliers, replace=False)
     ind_outliers_y = np.zeros((n, d))
-    ind_outliers_y[outliers_y] = 3.
+    ind_outliers_y[outliers_y] = 10.
     y = np.random.rand(n, d) - ind_outliers_y
     
     sliced = PerturbedMaheySlicedPartialOT(max_iter_gradient=20, max_iter_partial=n-n_outliers)

@@ -129,9 +129,6 @@ class PartialOT1d:
 
           And `diff_ranks` is just `ranks_xy_x_cum - ranks_xy_y_cum`.
 
-        * `d_cumranks_indices` indicates, for each `diff_ranks` value, 
-          the sorted lists of all indexes of its occurrences in `diff_ranks`
-
         Examples
         --------
         >>> p = PartialOT1d(max_iter=2)

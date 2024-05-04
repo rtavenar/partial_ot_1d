@@ -1,8 +1,10 @@
 import numpy as np
-import tensorflow as tf
-import perturbations
+import torch
+import perturbations_torch as perturbations
 
 from sliced import SlicedPartialOT, PartialOT1d
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class PerturbedMaheySlicedPartialOT(SlicedPartialOT):
     def __init__(self, max_iter_gradient, max_iter_partial=None) -> None:
@@ -11,9 +13,9 @@ class PerturbedMaheySlicedPartialOT(SlicedPartialOT):
         self.partial_problem = PartialOT1d(self.max_iter_partial)
 
     def project_in_1d(self, x, y, w):
-        w /= np.sqrt(np.sum(w ** 2, axis=-1, keepdims=True))
-        proj_x = np.dot(w, x.T).T
-        proj_y = np.dot(w, y.T).T
+        # w /= torch.sqrt(torch.sum(w ** 2, axis=-1, keepdims=True))
+        proj_x = (w @ x.T).T
+        proj_y = (w @ y.T).T
         return proj_x, proj_y
 
     def fit(self, x, y):
@@ -35,30 +37,32 @@ class PerturbedMaheySlicedPartialOT(SlicedPartialOT):
                 cost = np.sum(np.abs(subset_x - subset_y))
                 perturbed_costs.append(cost)
 
-            return tf.cast(tf.stack(perturbed_costs), dtype=tf.float32)
+            return torch.tensor(perturbed_costs)
         
         pert_action = perturbations.perturbed(action,
                                               num_samples=1000,
                                               sigma=0.5,
                                               noise='gumbel',
-                                              batched=False)
+                                              batched=False, 
+                                              device=device)
 
         min_cost = np.inf
         bool_indices_x, bool_indices_y = None, None
-        w = tf.Variable(self.draw_direction(d), dtype=tf.float32)
+        w = torch.tensor(self.draw_direction(d))
         for _ in range(self.max_iter_gradient):
-            with tf.GradientTape() as tape:
-                theta = tf.Variable(w)
-                pert_cost = pert_action(theta)
-                grad_pert, = tape.gradient(pert_cost, [theta])
+            output = pert_action(w)
+            output.backward(torch.ones_like(output))
             
-            w = tf.Variable(w - eta * grad_pert, dtype=tf.float32)
+            # We coud use an optimizer below at some point
+            with torch.no_grad():
+                w -= w.grad * eta
+                w.grad.zero_()
 
             cost = float(pert_cost)
             print(cost)
 
             if cost < min_cost:
-                best_w = np.array(w)
+                best_w = w.detach.numpy()
                 min_cost = cost
         
         proj_x, proj_y = self.project_in_1d(x, y, best_w)

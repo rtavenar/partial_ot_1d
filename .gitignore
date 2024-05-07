@@ -6,3 +6,6 @@ visu_uot.py
 venv/
 baselines/
 timings_partial.pdf
+data/
+processed_data/
+.DS_Store

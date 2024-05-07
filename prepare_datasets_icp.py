@@ -32,28 +32,28 @@ for problem in vertices_per_problem.keys():
 
             n_source = 10 * 1000
             source = random_subsample(vertices, target_n=n_source)
-            target = source[:n_target]
             rot_matrix = rotation_matrix_3d(2 * np.pi / 3 * torch.rand(3, ) - np.pi / 3).detach().numpy()
-            rotated_target = target @ rot_matrix
+            rotated_source = source @ rot_matrix
             scaling_factor = 2 * np.random.rand(3, )
-            scaled_target = scaling_factor * rotated_target
-            std = np.std(scaled_target)
+            scaled_source = scaling_factor * rotated_source
+            std = np.std(scaled_source)
             shift = 4 * std * np.random.rand(3, ) - 2 * std
-            shifted_target = scaled_target + shift
-            M = np.max(np.linalg.norm(shifted_target, axis=1))
-            shifted_target_with_noise = np.concatenate((shifted_target, 
+            shifted_source = scaled_source + shift
+            M = np.max(np.linalg.norm(shifted_source, axis=1))
+            shifted_source_with_noise = np.concatenate((shifted_source, 
                                                         4 * M * np.random.rand(int(p * n_source), 3) - 2 * M))
 
-            M = np.max(np.linalg.norm(source, axis=1))
-            source_with_noise = np.concatenate((source, 
-                                                4 * M * np.random.rand(int(p * n_source), 3) - 2 * M))
+            target = source[:n_target]
+            M = np.max(np.linalg.norm(target, axis=1))
+            target_with_noise = np.concatenate((target, 
+                                                4 * M * np.random.rand(int(p * n_target), 3) - 2 * M))
 
-            shape_image(source_with_noise, shifted_target_with_noise, 
+            shape_image(target_with_noise, shifted_source_with_noise, 
                         name=f"processed_data/{problem}_p{p}_n_target{n_target}",
                         param=vis_param_list[problem])
             np.savez(f"processed_data/{problem}_p{p}_n_target{n_target}.npz",
-                     source_data=source_with_noise,
-                     target_data=shifted_target_with_noise,
+                     source_data=shifted_source_with_noise,
+                     target_data=target_with_noise,
                      rotation_matrix=rot_matrix,
                      scaling_factor=scaling_factor,
                      shift=shift)

@@ -1,11 +1,9 @@
 .pytest_cache/
 __pycache__/
-Cij_lt_lambda.py
-unbalanced_using_groups.py
-visu_uot.py
 venv/
 baselines/
 timings_partial.pdf
 data/
 processed_data/
 .DS_Store
+results_icp/

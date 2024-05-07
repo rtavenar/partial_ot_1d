@@ -8,6 +8,7 @@ for problem in ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
     for p in [.05, .07]:
         for n_target in [9 * 1000, 10 * 1000]:
             for baseline in ["icp_du", "spot_bonneel", "sopt"]:
+                print(problem, p, n_target, baseline)
                 baseline_fun = {
                     "icp_du": lambda s, t: icp_du(s, t, n_iterations=100),
                     "spot_bonneel": lambda s, t: spot_bonneel(s, t, n_projections=20, n_iterations=100),

@@ -403,18 +403,18 @@ class PartialOT1d:
         ---------
         x : array-like of shape (n, )
             First distrib to be considered (weights are considered uniform)
-        y : array-like of shape (n, )
+        y : array-like of shape (m, )
             Second distrib to be considered (weights are considered uniform)
 
         Returns
         -------
-        indices_x : np.ndarray of shape (self.max_iter, ) or (n, )
+        indices_x : np.ndarray of shape (self.max_iter, ) or (min(n, m), )
             Indices of elements from the x distribution to be included in the partial solutions
             Order of appearance in this array indicates order of inclusion in the solution
-        indices_y : np.ndarray of shape (self.max_iter, ) or (n, )
+        indices_y : np.ndarray of shape (self.max_iter, ) or (min(n, m), )
             Indices of elements from the x distribution to be included in the partial solutions
             Order of appearance in this array indicates order of inclusion in the solution
-        list_marginal_costs : list of length self.max_iter or n
+        list_marginal_costs : list of length self.max_iter or min(n, m)
             List of marginal costs associated to the intermediate partial problems
             `np.cumsum(list_marginal_costs)` gives the corresponding total costs for intermediate partial problems
 
@@ -470,10 +470,10 @@ class PartialOT1d:
         print("=" * (15 + self.n_x + self.n_y))
 
 if __name__ == "__main__":
-    pb = PartialOT1d(max_iter=40)
+    pb = PartialOT1d(max_iter=25)
     np.random.seed(0)
     x = np.random.rand(30, )
-    y = np.random.rand(30, )
+    y = np.random.rand(40, )
     indices_x, indices_y, marginal_costs = pb.fit(x, y)
     print(len(indices_x), len(indices_y))
     print(indices_x)

@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from baselines.cvpr23_bai_icp_xp import shape_image, vis_param_list, icp_du, spot_bonneel, sopt_main
 
@@ -17,7 +18,10 @@ for problem in ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
                 data = np.load(f"processed_data/{problem}_p{p}_n_target{n_target}.npz")
                 source_data = data["source_data"]
                 target_data = data["target_data"]
+
+                t0 = time.time()
                 rotation_list, scalar_list, beta_list = baseline_fun[baseline](source_data, target_data)
+                total_time = time.time() - t0
 
                 if viz:
                     n_iter = len(rotation_list)
@@ -26,6 +30,7 @@ for problem in ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
                         transformed_source_data = source_data @ rotation * scalar + beta
                         shape_image(target_data, transformed_source_data, param=vis_param_list[problem])
                 np.savez(f"results_icp/{problem}_p{p}_n_target{n_target}_baseline-{baseline}.npz",
-                        rotation_list=rotation_list,
-                        scalar_list=scalar_list,
-                        beta_list=beta_list)
+                         rotation_list=rotation_list,
+                         scalar_list=scalar_list,
+                         beta_list=beta_list,
+                         total_time=total_time)

@@ -379,9 +379,9 @@ class PartialOT1d:
         """
         if len(indices_x) != len(indices_y):
             warnings.warn("A valid solution should have as many x's as y's", RuntimeWarning)
-        if not np.alltrue(np.array(indices_x) < self.n_x) or not np.alltrue(np.array(indices_x) >= 0):
+        if not np.all(np.array(indices_x) < self.n_x) or not np.all(np.array(indices_x) >= 0):
             warnings.warn(f"All x indices should be between 0 and {self.n_x - 1}", RuntimeWarning)
-        if not np.alltrue(np.array(indices_y) < self.n_y) or not np.alltrue(np.array(indices_y) >= 0):
+        if not np.all(np.array(indices_y) < self.n_y) or not np.all(np.array(indices_y) >= 0):
             warnings.warn(f"All y indices should be between 0 and {self.n_y - 1}", RuntimeWarning)
         # We could implement other checks here
 

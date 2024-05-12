@@ -1,6 +1,8 @@
 import numpy as np
 import warnings
 from sortedcontainers import SortedList
+from kneed import KneeLocator
+
 
 class PartialOT1d:
     def __init__(self, max_iter) -> None:
@@ -309,11 +311,12 @@ class PartialOT1d:
         >>> p.generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum)
         (array([1, 2, 3]), array([0, 1, 2]), [1, 1, 5])
         """
+        max_iter = self.max_iter if self.max_iter != "elbow" else min(self.n_x, self.n_y)
         active_set = set()
         packs = SortedList(key=lambda t: t[0])
         list_marginal_costs = []
         list_active_set_inserts = []
-        while len(costs) > 0 and self.max_iter > len(active_set) // 2:
+        while len(costs) > 0 and max_iter > len(active_set) // 2:
             i, j, c = costs.pop(index=0)
             if i in active_set or j in active_set:
                 continue
@@ -442,7 +445,22 @@ class PartialOT1d:
         self.check_solution_valid(sol_indices_x_sorted, sol_indices_y_sorted)
 
         # Convert back into indices in original `x` and `y` distribs
-        return self.indices_sort_x[sol_indices_x_sorted], self.indices_sort_y[sol_indices_y_sorted], sol_costs
+        self.indices_x_ = self.indices_sort_x[sol_indices_x_sorted]
+        self.indices_y_ = self.indices_sort_y[sol_indices_y_sorted]
+        self.marginal_costs_ = sol_costs
+
+        if self.max_iter == "elbow":
+            kneedle = KneeLocator(x=np.arange(len(self.marginal_costs_)), 
+                                  y=np.cumsum(self.marginal_costs_), 
+                                  S=1.0, 
+                                  curve="convex", 
+                                  direction="increasing")
+            idx_elbow = int(kneedle.elbow)
+            return (self.indices_x_[:idx_elbow + 1], 
+                    self.indices_y_[:idx_elbow + 1], 
+                    self.marginal_costs_[:idx_elbow + 1])
+        else:
+            return self.indices_x_, self.indices_y_, self.marginal_costs_
 
     def _print_current_status(self, active_set, i, j):
         print("=" * (15 + self.n_x + self.n_y) + "\nCurrent status")
@@ -470,7 +488,7 @@ class PartialOT1d:
         print("=" * (15 + self.n_x + self.n_y))
 
 if __name__ == "__main__":
-    pb = PartialOT1d(max_iter=25)
+    pb = PartialOT1d(max_iter="elbow")
     np.random.seed(0)
     x = np.random.rand(30, )
     y = np.random.rand(40, )

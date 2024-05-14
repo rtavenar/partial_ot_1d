@@ -21,17 +21,19 @@ def bisect_left(arr, x):
 
 @njit
 def _insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
-    """Insert the `candidate_pack` into the sorted list of `packs`.
-    `packs` is modified in-place and the pack in which the candidate 
-    is inserted is returned.
+    """Insert the `candidate_pack` into the already known packs stored in 
+    `packs_starting_at` and `packs_ending_at`.
+    `packs_starting_at` and `packs_ending_at` are modified in-place and 
+    the pack in which the candidate is inserted is returned.
 
     Examples
     --------
-    >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
-    >>> PartialOT1d._insert_new_pack(packs, [5, 7])
+    >>> packs_starting_at = {2: 4, 8: 9}
+    >>> packs_ending_at = {4: 2, 9: 8}
+    >>> _insert_new_pack(packs_starting_at, packs_ending_at, [5, 7])
     [2, 9]
-    >>> packs # doctest: +ELLIPSIS
-    SortedKeyList([[2, 9]], key=<function <lambda> at ...>)
+    >>> packs_starting_at
+    {2: 9}
     >>> 
     >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
     >>> PartialOT1d._insert_new_pack(packs, [11, 12])
@@ -146,13 +148,13 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
 def preprocess(x, y):
     """Given two 1d distributions `x` and `y`:
     
-    1. `self.indices_sort_x` sorts `x` (ie. `x[self.indices_sort_x]` is sorted) and
-        `self.indices_sort_y` sorts `y` (ie. `y[self.indices_sort_y]` is sorted)
+    1. `indices_sort_x` sorts `x` (ie. `x[indices_sort_x]` is sorted) and
+       `indices_sort_y` sorts `y` (ie. `y[indices_sort_y]` is sorted)
     
     2. stack them into a single distrib such that:
     
-    * the new distrib is sorted with sort indices (wrt a stack of sorted x and sorted y) `self.indices_sort_xy`
-    * `self.sorted_distrib_indicator` is a vector of zeros and ones where 0 means 
+    * the new distrib is sorted with sort indices (wrt a stack of sorted x and sorted y) `indices_sort_xy`
+    * `sorted_distrib_indicator` is a vector of zeros and ones where 0 means 
         "this point comes from x" and 1 means "this point comes from y"
     """
     indices_sort_x = np.argsort(x)
@@ -378,7 +380,7 @@ def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
     return ranks_xy, diff_ranks
 
 @njit
-def partial_ot_1d(x, y, max_iter):
+def partial_ot_1d(x, y, max_iter, use_elbow=False):
     """Main method for the class.
     
     Does:
@@ -452,7 +454,10 @@ def partial_ot_1d(x, y, max_iter):
     indices_y_ = indices_sort_y[sol_indices_y_sorted]
     marginal_costs_ = sol_costs
 
-    # if max_iter == "elbow":
+    # TODO: elbow detection in numba
+    if use_elbow:
+        raise NotImplementedError
+    # if use_elbow:
     #     kneedle = KneeLocator(x=np.arange(len(marginal_costs_)), 
     #                             y=np.cumsum(marginal_costs_), 
     #                             S=1.0, 
@@ -462,7 +467,6 @@ def partial_ot_1d(x, y, max_iter):
     #     return (indices_x_[:idx_elbow + 1], 
     #             indices_y_[:idx_elbow + 1], 
     #             marginal_costs_[:idx_elbow + 1])
-    # else:
     return indices_x_, indices_y_, marginal_costs_
 
 class PartialOT1d:

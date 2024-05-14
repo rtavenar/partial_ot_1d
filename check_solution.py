@@ -1,6 +1,6 @@
 import ot
 import numpy as np 
-from partial import PartialOT1d
+from partial_nb import partial_ot_1d
 
 np.random.seed(0)
 
@@ -9,8 +9,7 @@ x = np.random.rand(n)
 y = np.random.rand(n)
 
 M = ot.dist(x[:, None], y[:, None], metric="minkowski", p=1)
-pb = PartialOT1d(max_iter=n)
-indices_x, indices_y, marginal_costs = pb.fit(x, y)
+indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=n)
 costs = np.cumsum(marginal_costs)
 
 for i in range(1, n):

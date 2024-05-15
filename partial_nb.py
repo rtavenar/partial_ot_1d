@@ -20,7 +20,7 @@ def bisect_left(arr, x):
     return M
 
 @njit
-def _insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
+def insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
     """Insert the `candidate_pack` into the already known packs stored in 
     `packs_starting_at` and `packs_ending_at`.
     `packs_starting_at` and `packs_ending_at` are modified in-place and 
@@ -31,59 +31,66 @@ def _insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
     >>> packs_starting_at = {2: 4, 8: 9}
     >>> packs_ending_at = {4: 2, 9: 8}
     >>> _insert_new_pack(packs_starting_at, packs_ending_at, [5, 7])
-    [2, 9]
+    (2, 9)
     >>> packs_starting_at
     {2: 9}
     >>> 
-    >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
-    >>> PartialOT1d._insert_new_pack(packs, [11, 12])
-    [11, 12]
-    >>> packs # doctest: +ELLIPSIS
-    SortedKeyList([[2, 4], [8, 9], [11, 12]], key=<function <lambda> at ...>)
+    >>> packs_starting_at = {2: 4, 8: 9}
+    >>> packs_ending_at = {4: 2, 9: 8}
+    >>> _insert_new_pack(packs_starting_at, packs_ending_at, [11, 12])
+    (11, 12)
+    >>> packs_starting_at
+    {2: 4, 8: 9, 11: 12}
     >>> 
-    >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
-    >>> PartialOT1d._insert_new_pack(packs, [5, 6])
-    [2, 6]
-    >>> packs # doctest: +ELLIPSIS
-    SortedKeyList([[2, 6], [8, 9]], key=<function <lambda> at ...>)
+    >>> packs_starting_at = {2: 4, 8: 9}
+    >>> packs_ending_at = {4: 2, 9: 8}
+    >>> _insert_new_pack(packs_starting_at, packs_ending_at, [5, 6])
+    (2, 6)
+    >>> packs_starting_at
+    {2: 6, 8: 9}
     >>> 
-    >>> packs = SortedList([[2, 4], [8, 9]], key=lambda t: t[0])
-    >>> PartialOT1d._insert_new_pack(packs, [6, 7])
-    [6, 9]
-    >>> packs # doctest: +ELLIPSIS
-    SortedKeyList([[2, 4], [6, 9]], key=<function <lambda> at ...>)
+    >>> packs_starting_at = {2: 4, 8: 9}
+    >>> packs_ending_at = {4: 2, 9: 8}
+    >>> _insert_new_pack(packs_starting_at, packs_ending_at, [6, 7])
+    (6, 9)
+    >>> packs_starting_at
+    {2: 4, 6: 9}
     """
     i, j = candidate_pack
     if i - 1  in packs_ending_at:
         i = packs_ending_at[i - 1]
     if j + 1 in packs_starting_at:
         j = packs_starting_at[j + 1]
+    if i in packs_starting_at:
+        del packs_ending_at[packs_starting_at[i]]
     packs_starting_at[i] = j
+    if j in packs_ending_at:
+        del packs_starting_at[packs_ending_at[j]]
     packs_ending_at[j] = i
     return i, j
 
 @njit
-def _compute_cost_for_pack(idx_start, idx_end, pack_costs_cumsum):
+def compute_cost_for_pack(idx_start, idx_end, pack_costs_cumsum):
     """Compute the associated cost for a pack (set of contiguous points
     included in the solution) ranging from `idx_start` to `idx_end` (both included).
     """
     return pack_costs_cumsum[idx_end] - pack_costs_cumsum.get(idx_start - 1, 0)
 
 @njit
-def precompute_pack_costs_cumsum(_group_ending_at, n):
+def precompute_pack_costs_cumsum(group_ending_at, n):
     """For each position `i` at which a pack could end,
     Compute (using dynamic programming and the costs of groups that have been precomputed)
     the cost of the largest pack ending at `i`.
 
     This is useful because this can be used later, to compute the cost of any pack in O(1)
-    (cf. `_compute_cost_for_pack`).
+    (cf. `compute_cost_for_pack`).
     """
     pack_costs_cumsum = Dict.empty(key_type=types.int64, value_type=types.float64)
     for i in range(n):
         # If there is a group ending there
         # (if not, this cannot be the end of a pack)
-        if i in _group_ending_at:
-            start, additional_cost = _group_ending_at[i]
+        if i in group_ending_at:
+            start, additional_cost = group_ending_at[i]
             pack_costs_cumsum[i] = pack_costs_cumsum.get(start - 1, 0) + additional_cost
     return pack_costs_cumsum
 
@@ -204,12 +211,12 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
         new_pack = None
         # Case 1: j == i + 1 => "Simple" insert
         if j == i + 1:
-            new_pack = _insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
+            new_pack = insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
         # Case 2: insert a group that contains a pack
         elif j - 1 in packs_ending_at:
             del packs_starting_at[i + 1]
             del packs_ending_at[j - 1]
-            new_pack = _insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
+            new_pack = insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
         # There should be no "Case 3"
         else:
             # self._print_current_status(active_set, i, j)
@@ -224,8 +231,8 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
             continue
         if sorted_distrib_indicator[p_s - 1] != sorted_distrib_indicator[p_e + 1]:
             # Insert (p_s - 1, p_e + 1) as a new pseudo-group with marginal cost
-            marginal_cost = (_compute_cost_for_pack(p_s - 1, p_e + 1, pack_costs_cumsum)
-                                - _compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
+            marginal_cost = (compute_cost_for_pack(p_s - 1, p_e + 1, pack_costs_cumsum)
+                                - compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
             heapq.heappush(costs, (marginal_cost, p_s - 1, p_e + 1))
 
     # Generate index arrays in the order of insertion in the active set

@@ -14,7 +14,7 @@ n_repeat = 3
 values_for_n =  [1000, 3000, 10000, 30000, 100000, 300000, 1000000]
 timings_ours = []
 timings_aistats22 = []
-lambdas_cvpr23 = [1e-2, 1e-1, 1.]  # lambda_hat = lambda / median_dist
+lambdas_cvpr23 = [1e-3]  # lambda_hat = lambda / median_dist
 rho_aistats22 = 1.
 timings_cvpr23 = {k: [] for k in lambdas_cvpr23}
 

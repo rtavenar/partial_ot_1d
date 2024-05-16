@@ -10,7 +10,7 @@ from numba.core import types
 cost_tuple_type = types.Tuple([types.float64, types.int64, types.int64])
 int64 = types.int64
 
-@njit
+@njit(cache=True, fastmath=True)
 def bisect_left(arr, x):
     """Similar to bisect.bisect_left(), from the built-in library."""
     M = len(arr)
@@ -19,7 +19,7 @@ def bisect_left(arr, x):
             return i
     return M
 
-@njit
+@njit(cache=True, fastmath=True)
 def insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
     """Insert the `candidate_pack` into the already known packs stored in 
     `packs_starting_at` and `packs_ending_at`.
@@ -69,14 +69,14 @@ def insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
     packs_ending_at[j] = i
     return i, j
 
-@njit
+@njit(cache=True, fastmath=True)
 def compute_cost_for_pack(idx_start, idx_end, pack_costs_cumsum):
     """Compute the associated cost for a pack (set of contiguous points
     included in the solution) ranging from `idx_start` to `idx_end` (both included).
     """
     return pack_costs_cumsum[idx_end] - pack_costs_cumsum.get(idx_start - 1, 0)
 
-@njit
+@njit(cache=True, fastmath=True)
 def precompute_pack_costs_cumsum(group_ending_at, n):
     """For each position `i` at which a pack could end,
     Compute (using dynamic programming and the costs of groups that have been precomputed)
@@ -94,7 +94,7 @@ def precompute_pack_costs_cumsum(group_ending_at, n):
             pack_costs_cumsum[i] = pack_costs_cumsum.get(start - 1, 0) + additional_cost
     return pack_costs_cumsum
 
-@njit
+@njit(cache=True, fastmath=True)
 def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     """For each element in sorted `x`, compute its group (cf note below).
     Then compute the cost for each group and sort all groups in increasing 
@@ -151,7 +151,7 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
             _group_ending_at[idx_end] = (idx_start, abs(cost))
     return l_costs, precompute_pack_costs_cumsum(_group_ending_at, n)
 
-@njit
+@njit(cache=True, fastmath=True)
 def preprocess(x, y):
     """Given two 1d distributions `x` and `y`:
     
@@ -175,7 +175,7 @@ def preprocess(x, y):
 
     return indices_sort_x, indices_sort_y, indices_sort_xy, sorted_distrib_indicator
 
-@njit
+@njit(cache=True, fastmath=True)
 def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, max_iter, sorted_distrib_indicator):
     """Generate a solution from a sorted list of group costs.
     See the note in `compute_costs` docs for a definition of groups.
@@ -245,7 +245,7 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
 
     return (indices_sorted_x, indices_sorted_y, list_marginal_costs)
 
-@njit
+@njit(cache=True, fastmath=True)
 def compute_cumulative_sum_differences(x_sorted, y_sorted, indices_sort_xy, sorted_distrib_indicator):
     """Computes difference between cumulative sums for both distribs.
 
@@ -285,7 +285,7 @@ def compute_cumulative_sum_differences(x_sorted, y_sorted, indices_sort_xy, sort
 
     return cum_sum_x - cum_sum_y
 
-@njit
+@njit(cache=True, fastmath=True)
 def _insert_constant_values_int(arr, distrib_index, sorted_distrib_indicator):
     """Takes `arr` as input. For each position `i` in `arr`, 
     if `self.sorted_distrib_indicator[i]==distrib_index`,
@@ -310,7 +310,7 @@ def _insert_constant_values_int(arr, distrib_index, sorted_distrib_indicator):
                 arr_insert[i] = arr_insert[i-1]
     return arr_insert
 
-@njit
+@njit(cache=True, fastmath=True)
 def _insert_constant_values_float(arr, distrib_index, sorted_distrib_indicator):
     """Takes `arr` as input. For each position `i` in `arr`, 
     if `self.sorted_distrib_indicator[i]==distrib_index`,
@@ -336,7 +336,7 @@ def _insert_constant_values_float(arr, distrib_index, sorted_distrib_indicator):
     return arr_insert
 
 
-@njit
+@njit(cache=True, fastmath=True)
 def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
     """Precompute important rank-related quantities for better group generation.
     
@@ -386,9 +386,9 @@ def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
 
     return ranks_xy, diff_ranks
 
-@njit
+@njit(cache=True, fastmath=True)
 def partial_ot_1d(x, y, max_iter):
-    """Main method for the class.
+    """Main routine for the partial OT problem in 1D.
     
     Does:
     
@@ -403,20 +403,23 @@ def partial_ot_1d(x, y, max_iter):
 
     Arguments
     ---------
-    x : array-like of shape (n, )
+    x : np.ndarray of shape (n, )
         First distrib to be considered (weights are considered uniform)
-    y : array-like of shape (m, )
+    y : np.ndarray of shape (m, )
         Second distrib to be considered (weights are considered uniform)
+    max_iter : int
+        Number of iterations of the algorithm, which is equal to the number of pairs
+        in the returned solution.
 
     Returns
     -------
-    indices_x : np.ndarray of shape (self.max_iter, ) or (min(n, m), )
+    indices_x : np.ndarray of shape (min(n, m, max_iter), )
         Indices of elements from the x distribution to be included in the partial solutions
         Order of appearance in this array indicates order of inclusion in the solution
-    indices_y : np.ndarray of shape (self.max_iter, ) or (min(n, m), )
+    indices_y : np.ndarray of shape (min(n, m, max_iter), )
         Indices of elements from the x distribution to be included in the partial solutions
         Order of appearance in this array indicates order of inclusion in the solution
-    list_marginal_costs : list of length self.max_iter or min(n, m)
+    list_marginal_costs : list of length min(n, m, max_iter)
         List of marginal costs associated to the intermediate partial problems
         `np.cumsum(list_marginal_costs)` gives the corresponding total costs for intermediate partial problems
 
@@ -427,10 +430,7 @@ def partial_ot_1d(x, y, max_iter):
     >>> partial_ot_1d(x, y, max_iter=2)
     (array([1, 2]), array([0, 2]), [1.0, 1.0])
     """
-    # assert type(x) is np.ndarray
-    # assert type(y) is np.ndarray
-
-    # Sort distribs and keep track of their original indices (stored in instance attributes)
+    # Sort distribs and keep track of their original indices
     indices_sort_x, indices_sort_y, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
 
     # Precompute useful quantities
@@ -441,30 +441,25 @@ def partial_ot_1d(x, y, max_iter):
     ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
 
     # Compute costs for "groups"
-    # print(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
     costs, pack_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
 
     # Generate solution from sorted costs
-    # print(costs)
     sol_indices_x_sorted, sol_indices_y_sorted, sol_costs = generate_solution_using_marginal_costs(costs, 
                                                                                                    ranks_xy, 
                                                                                                    pack_costs_cumsum, 
                                                                                                    max_iter, 
                                                                                                    sorted_distrib_indicator)
 
-    # self.check_solution_valid(sol_indices_x_sorted, sol_indices_y_sorted)
-
     # Convert back into indices in original `x` and `y` distribs
-    # print(sol_indices_x_sorted, max_iter, x)
-    indices_x_ = indices_sort_x[sol_indices_x_sorted]
-    indices_y_ = indices_sort_y[sol_indices_y_sorted]
-    marginal_costs_ = sol_costs
-    return indices_x_, indices_y_, marginal_costs_
+    indices_x = indices_sort_x[sol_indices_x_sorted]
+    indices_y = indices_sort_y[sol_indices_y_sorted]
+    marginal_costs = sol_costs
+    return indices_x, indices_y, marginal_costs
 
 
 
-def partial_ot_1d_elbow(x, y):
-    """Main method for the class.
+def partial_ot_1d_elbow(x, y, return_all_solutions=False):
+    """Main routine for the partial OT problem in 1D.
     
     Does:
     
@@ -472,6 +467,9 @@ def partial_ot_1d_elbow(x, y):
     2. Precomputations (ranks, cumulative sums)
     3. Extraction of groups
     4. Generate and return solution
+    
+    Here, the elbow method is used to compute the optimal partial problem size.
+    If no elbow is found on the cumulative cost series, the full solution is returned.
 
     Note that the indices in `indices_x` and `indices_y` are ordered wrt their order of
     appearance in the solution such that `indices_x[:10]` (resp y) is the set of indices
@@ -479,22 +477,27 @@ def partial_ot_1d_elbow(x, y):
 
     Arguments
     ---------
-    x : array-like of shape (n, )
+    x : np.ndarray of shape (n, )
         First distrib to be considered (weights are considered uniform)
-    y : array-like of shape (m, )
+    y : np.ndarray of shape (m, )
         Second distrib to be considered (weights are considered uniform)
+    return_all_solutions : bool
+        Whether all solutions should be returned (eg. to visualize the elbow) beyond
+        the elbow
 
     Returns
     -------
-    indices_x : np.ndarray of shape (self.max_iter, ) or (min(n, m), )
+    indices_x : np.ndarray of shape (min(n, m, max_iter), )
         Indices of elements from the x distribution to be included in the partial solutions
         Order of appearance in this array indicates order of inclusion in the solution
-    indices_y : np.ndarray of shape (self.max_iter, ) or (min(n, m), )
+    indices_y : np.ndarray of shape (min(n, m, max_iter), )
         Indices of elements from the x distribution to be included in the partial solutions
         Order of appearance in this array indicates order of inclusion in the solution
-    list_marginal_costs : list of length self.max_iter or min(n, m)
+    list_marginal_costs : list of length min(n, m, max_iter)
         List of marginal costs associated to the intermediate partial problems
         `np.cumsum(list_marginal_costs)` gives the corresponding total costs for intermediate partial problems
+    elbow_index : int
+        Elbow index
 
     Examples
     --------
@@ -504,19 +507,27 @@ def partial_ot_1d_elbow(x, y):
     (array([1, 2, 0]), array([0, 2, 1]), [1.0, 1.0, 4.0])
     """
     n = min(len(x), len(y))
-    indices_x_, indices_y_, marginal_costs_ = partial_ot_1d(x, y, max_iter=n)
-    kneedle = KneeLocator(x=np.arange(len(marginal_costs_)), 
-                          y=np.cumsum(marginal_costs_), 
+    indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=n)
+    kneedle = KneeLocator(x=np.arange(len(marginal_costs)), 
+                          y=np.cumsum(marginal_costs), 
                           S=1.0, 
                           curve="convex", 
                           direction="increasing")
     if kneedle.elbow is None:
+        # No elbow has been detected
         idx_elbow = n
     else:
         idx_elbow = int(kneedle.elbow)
-    return (indices_x_[:idx_elbow + 1], 
-            indices_y_[:idx_elbow + 1], 
-            marginal_costs_[:idx_elbow + 1])
+    if return_all_solutions:
+        return (indices_x, 
+                indices_y, 
+                marginal_costs,
+                idx_elbow + 1)
+    else:
+        return (indices_x[:idx_elbow + 1], 
+                indices_y[:idx_elbow + 1], 
+                marginal_costs[:idx_elbow + 1],
+                idx_elbow + 1)
 
 
 if __name__ == "__main__":

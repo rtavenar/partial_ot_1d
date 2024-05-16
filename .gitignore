@@ -3,6 +3,7 @@ __pycache__/
 venv/
 baselines/
 timings_partial.pdf
+timings_partial_nb_hq.pdf
 data/
 processed_data/
 .DS_Store

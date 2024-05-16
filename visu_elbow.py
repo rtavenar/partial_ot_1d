@@ -1,18 +1,17 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from partial import PartialOT1d
+from partial_nb import partial_ot_1d_elbow
 
 n = 30
-pb = PartialOT1d(max_iter="elbow")
 np.random.seed(0)
 ind_outliers = np.random.choice(2, p=[.9, .1], size=n)
-x = np.random.rand(n, ) + ind_outliers * 3
+x = np.random.rand(n, ) + ind_outliers * 1.
 np.random.shuffle(ind_outliers)
-y = np.random.rand(n, ) - ind_outliers * 3
-indices_x, indices_y, marginal_costs = pb.fit(x, y)
-cum_costs = np.cumsum(pb.marginal_costs_)
-n_inliers = len(indices_x)
+y = np.random.rand(n, ) - ind_outliers * 1.
+indices_x, indices_y, marginal_costs, elbow = partial_ot_1d_elbow(x, y, return_all_solutions=True)
+cum_costs = np.cumsum(marginal_costs)
+n_inliers = elbow
 n_outliers = np.sum(ind_outliers)
 
 plt.bar(x=np.arange(1, n_inliers + 1), height=cum_costs[0:n_inliers])

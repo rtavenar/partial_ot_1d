@@ -6,7 +6,6 @@ from numba import njit
 from numba.typed import Dict
 from numba.core import types
 
-cost_tuple_type = types.Tuple([types.float64, types.int64, types.int64])
 int64 = types.int64
 
 @njit(cache=True, fastmath=True)
@@ -117,7 +116,7 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     # [(1, 2, 1), (3, 4, 1), (5, 6, 5)]
     """
     l_costs = [(0.0, 0, 0) for _ in range(0)]
-    _group_ending_at = {}  #Dict.empty(key_type=types.int64, value_type=types.Tuple([types.int64, types.float64]))
+    _group_ending_at = {}
     last_pos_for_rank_x = Dict.empty(key_type=int64, value_type=int64)
     last_pos_for_rank_y = Dict.empty(key_type=int64, value_type=int64)
     n = len(diff_ranks)

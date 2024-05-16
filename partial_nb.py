@@ -72,7 +72,7 @@ def compute_cost_for_pack(idx_start, idx_end, pack_costs_cumsum):
     """Compute the associated cost for a pack (set of contiguous points
     included in the solution) ranging from `idx_start` to `idx_end` (both included).
     """
-    return pack_costs_cumsum[idx_end] - pack_costs_cumsum.get(idx_start - 1, 0)
+    return pack_costs_cumsum[idx_end] - pack_costs_cumsum[idx_start - 1]
 
 @njit(cache=True, fastmath=True)
 def precompute_pack_costs_cumsum(group_ending_at, n):
@@ -83,13 +83,13 @@ def precompute_pack_costs_cumsum(group_ending_at, n):
     This is useful because this can be used later, to compute the cost of any pack in O(1)
     (cf. `compute_cost_for_pack`).
     """
-    pack_costs_cumsum = Dict.empty(key_type=types.int64, value_type=types.float64)
+    pack_costs_cumsum = np.zeros((n, ))
     for i in range(n):
         # If there is a group ending there
         # (if not, this cannot be the end of a pack)
         if i in group_ending_at:
             start, additional_cost = group_ending_at[i]
-            pack_costs_cumsum[i] = pack_costs_cumsum.get(start - 1, 0) + additional_cost
+            pack_costs_cumsum[i] = pack_costs_cumsum[start - 1] + additional_cost
     return pack_costs_cumsum
 
 @njit(cache=True, fastmath=True)
@@ -103,41 +103,39 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     take to get a balanced set (ie. a set in which we have as many 
     elements from x as elements from y)
 
-    # Examples
-    # --------
-    # >>> p = PartialOT1d(max_iter=3)
-    # >>> x = [1, 2, 5, 6]
-    # >>> y = [3, 4, 11, 12]
-    # >>> p.preprocess(x, y)
-    # >>> diff_cum_sum = p.compute_cumulative_sum_differences()
-    # >>> ranks_xy, diff_ranks = p.compute_rank_differences()
-    # >>> costs, pack_costs_cumsum = p.compute_costs(diff_cum_sum, diff_ranks)
-    # >>> list(costs)
-    # [(1, 2, 1), (3, 4, 1), (5, 6, 5)]
+    Examples
+    --------
+    >>> x = np.array([1., 2., 5., 6.])
+    >>> y = np.array([3., 4., 11., 12.])
+    >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> diff_cum_sum = compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)
+    >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
+    >>> costs, pack_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    >>> list(costs)
+    [(1.0, 1, 2), (1.0, 3, 4), (5.0, 5, 6)]
     """
     l_costs = [(0.0, 0, 0) for _ in range(0)]
-    _group_ending_at = {}
+    group_ending_at = {}
     last_pos_for_rank_x = Dict.empty(key_type=int64, value_type=int64)
     last_pos_for_rank_y = Dict.empty(key_type=int64, value_type=int64)
     n = len(diff_ranks)
-    for i in range(n):
+    for idx_end in range(n):
         # For each item in either distrib, find the scope of the smallest
         # "group" that would start at that point and extend on the right, 
         # if one exists, and store the cost of this "group" by relying 
         # on differences of cumulative sums
-        idx_end = i
-        cur_rank = diff_ranks[i]
+        cur_rank = diff_ranks[idx_end]
         idx_start = -1
-        if sorted_distrib_indicator[i] == 0:
+        if sorted_distrib_indicator[idx_end] == 0:
             target_rank = cur_rank - 1
             if target_rank in last_pos_for_rank_y:
                 idx_start = last_pos_for_rank_y[target_rank]
-            last_pos_for_rank_x[cur_rank] = i
+            last_pos_for_rank_x[cur_rank] = idx_end
         else:
             target_rank = cur_rank + 1
             if target_rank in last_pos_for_rank_x:
                 idx_start = last_pos_for_rank_x[target_rank]
-            last_pos_for_rank_y[cur_rank] = i
+            last_pos_for_rank_y[cur_rank] = idx_end
         if idx_start != -1:
             if idx_start == 0:
                 cost = diff_cum_sum[idx_end] # - 0
@@ -145,9 +143,9 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
                 cost = diff_cum_sum[idx_end]   - diff_cum_sum[idx_start - 1]
             if idx_end == idx_start + 1:
                 heapq.heappush(l_costs, (abs(cost), idx_start, idx_end))
-            assert idx_end not in _group_ending_at
-            _group_ending_at[idx_end] = (idx_start, abs(cost))
-    return l_costs, precompute_pack_costs_cumsum(_group_ending_at, n)
+            assert idx_end not in group_ending_at
+            group_ending_at[idx_end] = (idx_start, abs(cost))
+    return l_costs, precompute_pack_costs_cumsum(group_ending_at, n)
 
 @njit(cache=True, fastmath=True)
 def preprocess(x, y):
@@ -228,16 +226,16 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
         if sorted_distrib_indicator[p_s - 1] != sorted_distrib_indicator[p_e + 1]:
             # Insert (p_s - 1, p_e + 1) as a new pseudo-group with marginal cost
             marginal_cost = (compute_cost_for_pack(p_s - 1, p_e + 1, pack_costs_cumsum)
-                                - compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
+                             - compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
             heapq.heappush(costs, (marginal_cost, p_s - 1, p_e + 1))
 
     # Generate index arrays in the order of insertion in the active set
     indices_sorted_x = np.array([ranks_xy[i] 
-                                    if sorted_distrib_indicator[i] == 0 else ranks_xy[j] 
-                                    for i, j in list_active_set_inserts])
+                                 if sorted_distrib_indicator[i] == 0 else ranks_xy[j] 
+                                 for i, j in list_active_set_inserts])
     indices_sorted_y = np.array([ranks_xy[i] 
-                                    if sorted_distrib_indicator[i] == 1 else ranks_xy[j] 
-                                    for i, j in list_active_set_inserts])
+                                 if sorted_distrib_indicator[i] == 1 else ranks_xy[j] 
+                                 for i, j in list_active_set_inserts])
 
     return (indices_sorted_x, indices_sorted_y, list_marginal_costs)
 
@@ -260,16 +258,15 @@ def compute_cumulative_sum_differences(x_sorted, y_sorted, indices_sort_xy, sort
     Overall, this function returns `cumsum_x - cumsum_y` where `cumsum_x`
     and `cumsum_y` are the extended versions.
 
-    # Examples
-    # --------
-    # >>> p = PartialOT1d(-1)
-    # >>> x = [-1, 3, 4]
-    # >>> y = [1, 2, 5]
-    # >>> p.preprocess(x, y)
-    # >>> p.sorted_distrib_indicator
-    # array([0, 1, 1, 0, 0, 1])
-    # >>> p.compute_cumulative_sum_differences()  # [-1, -1, -1, 2, 6, 6] - [0, 1, 3, 3, 3, 8]
-    # array([-1, -2, -4, -1,  3, -2])
+    Examples
+    --------
+    >>> x = np.array([-1., 3., 4.])
+    >>> y = np.array([1., 2., 5.])
+    >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> sorted_distrib_indicator
+    array([0, 1, 1, 0, 0, 1])
+    >>> compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)  # [-1, -1, -1, 2, 6, 6] - [0, 1, 3, 3, 3, 8]
+    array([-1., -2., -4., -1.,  3., -2.])
     """
     cum_sum_xs = np.cumsum(x_sorted)
     cum_sum_ys = np.cumsum(y_sorted)
@@ -282,20 +279,18 @@ def compute_cumulative_sum_differences(x_sorted, y_sorted, indices_sort_xy, sort
     return cum_sum_x - cum_sum_y
 
 @njit(cache=True, fastmath=True)
-def _insert_constant_values_int(arr, distrib_index, sorted_distrib_indicator):
+def insert_constant_values_int(arr, distrib_index, sorted_distrib_indicator):
     """Takes `arr` as input. For each position `i` in `arr`, 
     if `self.sorted_distrib_indicator[i]==distrib_index`,
     the value from `arr` is copied, 
     otherwise, the previous value that was copied from `arr` is repeated.
 
-    # Examples
-    # --------
-    # >>> p = PartialOT1d(-1)
-    # >>> x = [0, 3, 4]
-    # >>> y = [1, 2, 5]
-    # >>> p.preprocess(x, y)
-    # >>> p._insert_constant_values([1, -1, -1, 2, 3, -1], 0)
-    # array([1, 1, 1, 2, 3, 3])
+    Examples
+    --------
+    >>> arr = np.array([1, -1, -1, 2, 3, -1])
+    >>> sorted_distrib_indicator = np.array([0, 1, 1, 0, 0, 1])
+    >>> insert_constant_values_int(arr, 0, sorted_distrib_indicator)
+    array([1, 1, 1, 2, 3, 3])
     """
     arr_insert = np.copy(arr)
     for i in range(len(arr)):
@@ -313,14 +308,12 @@ def _insert_constant_values_float(arr, distrib_index, sorted_distrib_indicator):
     the value from `arr` is copied, 
     otherwise, the previous value that was copied from `arr` is repeated.
 
-    # Examples
-    # --------
-    # >>> p = PartialOT1d(-1)
-    # >>> x = [0, 3, 4]
-    # >>> y = [1, 2, 5]
-    # >>> p.preprocess(x, y)
-    # >>> p._insert_constant_values([1, -1, -1, 2, 3, -1], 0)
-    # array([1, 1, 1, 2, 3, 3])
+    Examples
+    --------
+    >>> arr = np.array([1., -1., -1., 2., 3., -1.])
+    >>> sorted_distrib_indicator = np.array([0, 1, 1, 0, 0, 1])
+    >>> insert_constant_values_int(arr, 0, sorted_distrib_indicator)
+    array([1., 1., 1., 2., 3., 3.])
     """
     arr_insert = np.copy(arr)
     for i in range(len(arr)):
@@ -371,12 +364,12 @@ def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
     ranks_xy_x = ranks_xy.copy()
     ranks_xy_x[sorted_distrib_indicator==1] = 0
     ranks_xy_x[sorted_distrib_indicator==0] += 1
-    ranks_xy_x_cum = _insert_constant_values_int(ranks_xy_x, 0, sorted_distrib_indicator)
+    ranks_xy_x_cum = insert_constant_values_int(ranks_xy_x, 0, sorted_distrib_indicator)
 
     ranks_xy_y = ranks_xy.copy()
     ranks_xy_y[sorted_distrib_indicator==0] = 0
     ranks_xy_y[sorted_distrib_indicator==1] += 1
-    ranks_xy_y_cum = _insert_constant_values_int(ranks_xy_y, 1, sorted_distrib_indicator)
+    ranks_xy_y_cum = insert_constant_values_int(ranks_xy_y, 1, sorted_distrib_indicator)
 
     diff_ranks = ranks_xy_x_cum - ranks_xy_y_cum
 
@@ -500,7 +493,7 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False):
     >>> x = np.array([5., -2., 4.])
     >>> y = np.array([-1., 1., 3.])
     >>> partial_ot_1d_elbow(x, y)
-    (array([1, 2, 0]), array([0, 2, 1]), [1.0, 1.0, 4.0])
+    (array([1, 2, 0]), array([0, 2, 1]), [1.0, 1.0, 4.0], 3)
     """
     n = min(len(x), len(y))
     indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=n)
@@ -511,7 +504,7 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False):
                           direction="increasing")
     if kneedle.elbow is None:
         # No elbow has been detected
-        idx_elbow = n
+        idx_elbow = n - 1
     else:
         idx_elbow = int(kneedle.elbow)
     if return_all_solutions:

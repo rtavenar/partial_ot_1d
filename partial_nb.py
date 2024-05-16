@@ -1,10 +1,9 @@
 import numpy as np
-import warnings
 import heapq
 from kneed import KneeLocator
 
 from numba import njit
-from numba.typed import Dict, List
+from numba.typed import Dict
 from numba.core import types
 
 cost_tuple_type = types.Tuple([types.float64, types.int64, types.int64])
@@ -534,7 +533,7 @@ if __name__ == "__main__":
     np.random.seed(0)
     x = np.random.rand(30, )
     y = np.random.rand(40, )
-    indices_x, indices_y, marginal_costs = partial_ot_1d_elbow(x, y)
+    indices_x, indices_y, marginal_costs, elbow = partial_ot_1d_elbow(x, y)
     print(len(indices_x), len(indices_y))
     print(indices_x)
     print(indices_y)

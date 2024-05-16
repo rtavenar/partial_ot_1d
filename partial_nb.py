@@ -195,7 +195,6 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
     # >>> p.generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum)
     # (array([1, 2, 3]), array([0, 1, 2]), [1, 1, 5])
     """
-    # max_iter = self.max_iter if self.max_iter != "elbow" else min(self.n_x, self.n_y)
     active_set = set()
     packs_starting_at = Dict.empty(key_type=int64, value_type=int64)
     packs_ending_at = Dict.empty(key_type=int64, value_type=int64)
@@ -217,7 +216,6 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
             new_pack = insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
         # There should be no "Case 3"
         else:
-            # self._print_current_status(active_set, i, j)
             raise ValueError
         active_set.update({i, j})
         list_active_set_inserts.append((i, j))

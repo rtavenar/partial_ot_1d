@@ -1,3 +1,19 @@
+"""
+This file contains a numba oriented implementation of the partial OT in 1D.
+The main functions to be used outside this file are:
+
+* `partial_ot_1d(x, y, max_iter)` where `x` and `y` are numpy arrays of 
+  shape (n, ) and (m, ) and `max_iter` is the number of pairs one wants to 
+  include in the solution. Note however that all partial solutions of size
+  lower than `max_iter` can be retrieved from the output of this function
+  (see docs of the function for more details)
+* `partial_ot_1d_elbow(x, y)` where `x` and `y` are numpy arrays of 
+  shape (n, ) and (m, ). In this alternative implementation, the number of 
+  pairs to be included in the solution is inferred using the elbow method on
+  the series of costs of partial solutions (see docs of the function for 
+  more details).
+"""
+
 import numpy as np
 import heapq
 from kneed import KneeLocator

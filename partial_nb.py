@@ -72,7 +72,7 @@ def compute_cost_for_pack(idx_start, idx_end, pack_costs_cumsum):
     """Compute the associated cost for a pack (set of contiguous points
     included in the solution) ranging from `idx_start` to `idx_end` (both included).
     """
-    return pack_costs_cumsum[idx_end] - pack_costs_cumsum[idx_start - 1]
+    return pack_costs_cumsum[idx_end] - pack_costs_cumsum.get(idx_start - 1, 0)
 
 @njit(cache=True, fastmath=True)
 def precompute_pack_costs_cumsum(group_ending_at, n):
@@ -83,13 +83,13 @@ def precompute_pack_costs_cumsum(group_ending_at, n):
     This is useful because this can be used later, to compute the cost of any pack in O(1)
     (cf. `compute_cost_for_pack`).
     """
-    pack_costs_cumsum = np.zeros((n, ))
+    pack_costs_cumsum = Dict.empty(key_type=types.int64, value_type=types.float64)
     for i in range(n):
         # If there is a group ending there
         # (if not, this cannot be the end of a pack)
         if i in group_ending_at:
             start, additional_cost = group_ending_at[i]
-            pack_costs_cumsum[i] = pack_costs_cumsum[start - 1] + additional_cost
+            pack_costs_cumsum[i] = pack_costs_cumsum.get(start - 1, 0) + additional_cost
     return pack_costs_cumsum
 
 @njit(cache=True, fastmath=True)
@@ -178,20 +178,21 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
 
     The solution is a pair of lists. The first list contains the indices from `sorted_x`
     that are in the active set, and the second one contains the indices from `sorted_y`
-    that are in the active set.
+    that are in the active set. 
+    The third returned element is a list of marginal costs induced by each step:
+    `list_marginal_costs[i]` is the marginal cost induced by the `i`-th step of the algorithm, such
+    that `np.cumsum(list_marginal_costs[:i])` gives all intermediate costs up to step `i`.
 
-    # Examples
-    # --------
-    # >>> p = PartialOT1d(max_iter=3)
-    # >>> x = [1, 2, 5, 6]
-    # >>> y = [3, 4, 11, 12]
-    # >>> p.preprocess(x, y)
-    # >>> diff_cum_sum = p.compute_cumulative_sum_differences()
-    # >>> ranks_xy, diff_ranks = p.compute_rank_differences()
-    # >>> costs, pack_costs_cumsum = p.compute_costs(diff_cum_sum, diff_ranks)
-    # >>> ranks_xy = p.compute_rank_differences()[0]
-    # >>> p.generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum)
-    # (array([1, 2, 3]), array([0, 1, 2]), [1, 1, 5])
+    Examples
+    --------
+    >>> x = np.array([1., 2., 5., 6.])
+    >>> y = np.array([3., 4., 11., 12.])
+    >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> diff_cum_sum = compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)
+    >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
+    >>> costs, pack_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    >>> generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, 3, sorted_distrib_indicator)
+    (array([1, 2, 3]), array([0, 1, 2]), [1.0, 1.0, 5.0])
     """
     active_set = set()
     packs_starting_at = Dict.empty(key_type=int64, value_type=int64)
@@ -329,7 +330,7 @@ def _insert_constant_values_float(arr, distrib_index, sorted_distrib_indicator):
 def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
     """Precompute important rank-related quantities for better group generation.
     
-    Three quantities are returned:
+    Two quantities are returned:
 
     * `ranks_xy` is an array that gathers ranks of the elements in 
         their original distrib, eg. if the distrib indicator is
@@ -343,17 +344,16 @@ def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
 
         And `diff_ranks` is just `ranks_xy_x_cum - ranks_xy_y_cum`.
 
-    # Examples
-    # --------
-    # >>> p = PartialOT1d(max_iter=2)
-    # >>> x = [-2, 2, 3]
-    # >>> y = [-1, 1, 5]
-    # >>> p.preprocess(x, y)
-    # >>> ranks_xy, diff_ranks = p.compute_rank_differences()
-    # >>> ranks_xy
-    # array([0, 0, 1, 1, 2, 2])
-    # >>> diff_ranks
-    # array([ 1,  0, -1,  0,  1,  0])
+    Examples
+    --------
+    >>> x = np.array([-2., 2., 3.])
+    >>> y = np.array([-1., 1., 5.])
+    >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
+    >>> ranks_xy
+    array([0, 0, 1, 1, 2, 2])
+    >>> diff_ranks
+    array([ 1,  0, -1,  0,  1,  0])
     """
     n_x = np.sum(sorted_distrib_indicator == 0)
     n_y = np.sum(sorted_distrib_indicator == 1)

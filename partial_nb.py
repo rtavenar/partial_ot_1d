@@ -137,7 +137,7 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     n = len(diff_ranks)
     for idx_end in range(n):
         # For each item in either distrib, find the scope of the smallest
-        # "group" that would start at that point and extend on the right, 
+        # "group" that would end at that point and extend on the left, 
         # if one exists, and store the cost of this "group" by relying 
         # on differences of cumulative sums
         cur_rank = diff_ranks[idx_end]
@@ -164,6 +164,30 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     return l_costs, precompute_pack_costs_cumsum(group_ending_at, n)
 
 @njit(cache=True, fastmath=True)
+def arg_insert_in_sorted(sorted_x, sorted_y):
+    n_x = sorted_x.shape[0]
+    n_y = sorted_y.shape[0]
+    arr_out = np.zeros((n_x + n_y), dtype=np.int64)
+    idx_x = 0
+    idx_y = 0
+    while idx_x + idx_y < n_x + n_y:
+        if idx_x == n_x:
+            arr_out[idx_x + idx_y] = n_x + idx_y
+            idx_y += 1
+        elif idx_y == n_y:
+            arr_out[idx_x + idx_y] = idx_x
+            idx_x += 1
+        else:
+            if sorted_x[idx_x] <= sorted_y[idx_y]:
+                arr_out[idx_x + idx_y] = idx_x
+                idx_x += 1
+            else:
+                arr_out[idx_x + idx_y] = n_x + idx_y
+                idx_y += 1
+    return arr_out
+
+
+@njit(cache=True, fastmath=True)
 def preprocess(x, y):
     """Given two 1d distributions `x` and `y`:
     
@@ -178,9 +202,7 @@ def preprocess(x, y):
     """
     indices_sort_x = np.argsort(x)
     indices_sort_y = np.argsort(y)
-
-    xy = np.concatenate((x[indices_sort_x], y[indices_sort_y]))
-    indices_sort_xy = np.argsort(xy)
+    indices_sort_xy = arg_insert_in_sorted(x[indices_sort_x], y[indices_sort_y])
 
     idx = np.concatenate((np.zeros(x.shape[0], dtype=np.int64), np.ones(y.shape[0], dtype=np.int64)))
     sorted_distrib_indicator = idx[indices_sort_xy]

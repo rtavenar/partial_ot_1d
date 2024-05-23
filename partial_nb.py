@@ -170,7 +170,8 @@ def arg_insert_in_sorted(sorted_x, sorted_y):
     (supposed to be 1d arrays).
 
     `sorted_x` and `sorted_y` are supposed to be sorted and their
-    order cannot be changed in the resulting array.
+    order cannot be changed in the resulting array (which is important
+    for our ranking based algo in case of ex-aequos).
 
     Examples
     --------

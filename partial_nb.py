@@ -165,6 +165,24 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
 
 @njit(cache=True, fastmath=True)
 def arg_insert_in_sorted(sorted_x, sorted_y):
+    """Returns the index (similar to argsort) to be used to sort 
+    the concatenation of `sorted_x` and `sorted_y` 
+    (supposed to be 1d arrays).
+
+    `sorted_x` and `sorted_y` are supposed to be sorted and their
+    order cannot be changed in the resulting array.
+
+    Examples
+    --------
+    >>> x = np.array([-2., -1., 1.])
+    >>> y = np.array([-3., 0., 1.5, 4.])
+    >>> arg_insert_in_sorted(x, y)
+    array([3, 0, 1, 4, 2, 5, 6])
+    >>> x = np.array([-2., -1., -1.])
+    >>> y = np.array([-3., 0., 1.5, 4.])
+    >>> arg_insert_in_sorted(x, y)
+    array([3, 0, 1, 2, 4, 5, 6])
+    """
     n_x = sorted_x.shape[0]
     n_y = sorted_y.shape[0]
     arr_out = np.zeros((n_x + n_y), dtype=np.int64)

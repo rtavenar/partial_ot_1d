@@ -1,3 +1,7 @@
+# WARNING: This code is left here but not used anymore for 
+# our experiments (we use data and code from Bai et al.)
+
+
 import pyminiply
 import os
 import torch

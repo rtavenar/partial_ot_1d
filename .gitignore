@@ -8,3 +8,4 @@ data/
 processed_data/
 .DS_Store
 results_icp/
+shape_registration_error_vs_timings.pdf

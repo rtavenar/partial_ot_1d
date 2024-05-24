@@ -1,13 +1,12 @@
 import numpy as np
 
-from partial import PartialOT1d
+from partial_nb import partial_ot_1d
 
 
 class SlicedPartialOT:
     def __init__(self, n_proj, max_iter_partial=None) -> None:
         self.n_proj = n_proj
         self.max_iter_partial = max_iter_partial
-        self.partial_problem = PartialOT1d(self.max_iter_partial)
 
     def draw_direction(self, d):
         w = np.random.randn(d)
@@ -31,7 +30,7 @@ class MonteCarloSlicedPartialOT(SlicedPartialOT):
         for _ in range(self.n_proj):
             w = self.draw_direction(d)
             proj_x, proj_y = self.project_in_1d(x, y, w)
-            ind_x, ind_y, marginal_costs = self.partial_problem.fit(proj_x, proj_y)
+            ind_x, ind_y, marginal_costs = partial_ot_1d(proj_x, proj_y, self.max_iter_partial)
             selection_freq_x[ind_x] += 1.
             selection_freq_y[ind_y] += 1.
             avg_cost += np.sum(marginal_costs) # Sum of marginal costs is the total cost
@@ -49,7 +48,7 @@ class MaheySlicedPartialOT(SlicedPartialOT):
         for _ in range(self.n_proj):
             w = self.draw_direction(d)
             proj_x, proj_y = self.project_in_1d(x, y, w)
-            ind_x, ind_y, _ = self.partial_problem.fit(proj_x, proj_y)
+            ind_x, ind_y, _ = partial_ot_1d(proj_x, proj_y, self.max_iter_partial)
 
             sorted_ind_x = np.sort(ind_x)
             sorted_ind_y = np.sort(ind_y)

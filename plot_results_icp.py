@@ -9,6 +9,7 @@ baselines = {"icp_du": "ICP (Du)",
              "spot_bonneel": "SPOT",
              "sopt": "SOPT (uses $n_0$)", 
              "ours_apriori": "Ours (uses $n_0$)", 
+            #  "mahey_apriori": "SWGG (uses $n_0$)", 
              "ours_elbow": "Ours (elbow method)"
              }
 datasets = ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']
@@ -71,7 +72,6 @@ for idx_p, problem in enumerate(datasets):
                 plt.plot(timings_list, norm_error_list,
                          label=baselines[baseline])
             plt.xlim([0, 200])
-plt.subplot(4, 4, 16)
 plt.legend(bbox_to_anchor=(1.04, 0.), loc="lower left")
 plt.tight_layout()
 plt.savefig("shape_registration_error_vs_timings.pdf")

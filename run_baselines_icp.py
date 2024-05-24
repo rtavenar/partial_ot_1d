@@ -17,7 +17,6 @@ for problem in ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
             }
             for baseline in baseline_fun.keys():
                 print(problem, percent, n_source, baseline)
-                # data = np.load(f"processed_data/{problem}_p{p}_n_source{n_source}.npz")
                 data = torch.load(f"shape_data_bai/{problem}.pt")
                 source_data = data[f"S-{n_source // 1000}k-{percent}p"].astype(np.float64)
                 target_data = data[f"T-{percent}p"].astype(np.float64)

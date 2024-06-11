@@ -27,7 +27,7 @@ def init_useful_vectors(x, y):
     lab_xy = lab_xy[r_xy]
     pos_xy = np.concatenate((pos_x, pos_y))
     pos_xy = pos_xy[r_xy]
-    print("positions", pos_xy)
+    #print("positions", pos_xy)
 
     #cumulated sum over the sorted concatenated labels and costs
     cum_sum_lab_xy = np.cumsum(lab_xy)
@@ -110,9 +110,9 @@ def compute_costs_for_reg_path(xy, lab_xy, dict_cum_sum_lab_x, cum_sum_costs_x_r
                 if (i - prev_cum_sum) == 1:
                     dict_candidates[i] = prev_cum_sum
                     dict_candidates_cost[i] = cost_groups[i]
-    print("cost groups then series")
-    print(cost_groups)
-    print(cost_series)
+    #print("cost groups then series")
+    #print(cost_groups)
+    #print(cost_series)
     return dict_candidates, dict_candidates_cost
 
 

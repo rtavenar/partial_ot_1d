@@ -39,7 +39,7 @@ class MonteCarloSlicedPartialOT(SlicedPartialOT):
         return selection_freq_x / self.n_proj, selection_freq_y / self.n_proj, avg_cost / self.n_proj
 
 
-class MaheySlicedPartialOT(SlicedPartialOT):
+class PartialSWGG(SlicedPartialOT):
     def fit(self, x, y, projections=None):
         assert x.shape[1] == y.shape[1]
         n, d = x.shape[:2]
@@ -97,6 +97,6 @@ if __name__ == "__main__":
     print(freq_y)
     print(freq_y[outliers_y])
     
-    sliced = MaheySlicedPartialOT(n_proj=100, max_iter_partial=n-n_outliers)
+    sliced = PartialSWGG(n_proj=100, max_iter_partial=n-n_outliers)
     ind_x, ind_y, theta, min_cost = sliced.fit(x, y)
     print(min_cost)

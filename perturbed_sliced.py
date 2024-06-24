@@ -1,11 +1,111 @@
 import numpy as np
+
 import torch
-import perturbations as perturbations
+from torch.distributions.gumbel import Gumbel
+from torch.distributions.normal import Normal
 
-from sliced import SlicedPartialOT, PartialOT1d
+from sliced import SlicedPartialOT
+from partial import PartialOT1d
 
-class PerturbedMaheySlicedPartialOT(SlicedPartialOT):
-    def __init__(self, max_iter_gradient, max_iter_partial=None, opt_lambda_fun=None, device=None) -> None:
+_GUMBEL = 'gumbel'
+_NORMAL = 'normal'
+SUPPORTED_NOISES = (_GUMBEL, _NORMAL)
+
+def sample_noise_with_gradients(noise, shape):
+    """Samples a noise tensor according to a distribution with its gradient.
+
+    Args:
+    noise: (str) a type of supported noise distribution.
+    shape: torch.tensor<int>, the shape of the tensor to sample.
+
+    Returns:
+    A tuple Tensor<float>[shape], Tensor<float>[shape] that corresponds to the
+    sampled noise and the gradient of log the underlying probability
+    distribution function. For instance, for a gaussian noise (normal), the
+    gradient is equal to the noise itself.
+
+    Raises:
+    ValueError in case the requested noise distribution is not supported.
+    See perturbations.SUPPORTED_NOISES for the list of supported distributions.
+    """
+    if noise not in SUPPORTED_NOISES:
+        raise ValueError('{} noise is not supported. Use one of [{}]'.format(
+            noise, SUPPORTED_NOISES))
+
+    if noise == _GUMBEL:
+        sampler = Gumbel(0.0, 1.0)
+        samples = sampler.sample(shape)
+        gradients = 1 - torch.exp(-samples)
+    elif noise == _NORMAL:
+        sampler = Normal(0.0, 1.0)
+        samples = sampler.sample(shape)
+        gradients = samples
+
+    return samples, gradients
+
+def project_in_1d(x, y, w):
+    # w /= torch.sqrt(torch.sum(w ** 2, axis=-1, keepdims=True))
+    proj_x = (w @ x.T).T
+    proj_y = (w @ y.T).T
+    return proj_x, proj_y
+
+def swgg_score_theta(thetas, x, y, max_iter_partial):
+    proj_x, proj_y = project_in_1d(x, y, thetas)
+    perturbed_costs = []
+    partial_pb = PartialOT1d(max_iter_partial)
+    # Iterate over the perturbation dimension
+    for proj_x_i, proj_y_i in zip(proj_x.T, proj_y.T):
+        ind_x, ind_y, marginal_costs = partial_pb.fit(proj_x_i, proj_y_i)
+
+        sorted_ind_x = np.sort(ind_x)
+        sorted_ind_y = np.sort(ind_y)
+        subset_x = x[sorted_ind_x]
+        subset_y = y[sorted_ind_y]
+        cost = np.sum(np.abs(subset_x - subset_y))
+        perturbed_costs.append(cost / ind_x.shape[0])
+
+    return torch.tensor(perturbed_costs)
+
+class SWGGStep(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, theta, x, y, max_iter_partial, n_samples, noise_type, epsilon, device):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the output. ctx is a context object that can be used
+        to stash information for backward computation. You can cache arbitrary
+        objects for use in the backward pass using the ctx.save_for_backward method.
+        """
+        input_shape = theta.shape  # [D, ]
+        perturbed_input_shape = [n_samples] + list(input_shape)
+        additive_noise, noise_gradient = sample_noise_with_gradients(noise_type, perturbed_input_shape)
+        additive_noise = additive_noise.to(device)
+        noise_gradient = noise_gradient.to(device)
+        perturbed_input = theta.unsqueeze(0) + epsilon * additive_noise  # [N, D]
+
+        # [...]
+        # perturbed_output is [n_samples, ]
+        perturbed_output = swgg_score_theta(perturbed_input, x, y, max_iter_partial)
+
+        ctx.save_for_backward(perturbed_output, noise_gradient, torch.tensor(epsilon))
+        return torch.mean(perturbed_output, dim=0)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the loss
+        with respect to the output, and we need to compute the gradient of the loss
+        with respect to the input.
+        """
+        perturbed_output, noise_gradient, epsilon = ctx.saved_tensors
+        grad_theta = grad_output * perturbed_output.unsqueeze(1) * noise_gradient / epsilon
+        return torch.mean(grad_theta, dim=0), None, None, None, None, None, None, None
+
+swgg_step = SWGGStep.apply
+
+class PerturbedPartialSWGG(SlicedPartialOT):
+    def __init__(self, max_iter_gradient, max_iter_partial=None, opt_lambda_fun=None, 
+                 perturbation_n_samples=1000, perturbation_sigma=1., perturbation_noise="normal", device=None) -> None:
         self.max_iter_gradient = max_iter_gradient
         self.max_iter_partial = max_iter_partial
         self.partial_problem = PartialOT1d(self.max_iter_partial)
@@ -14,91 +114,82 @@ class PerturbedMaheySlicedPartialOT(SlicedPartialOT):
         else:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.opt_lambda_fun = opt_lambda_fun
-
-    def project_in_1d(self, x, y, w):
-        # w /= torch.sqrt(torch.sum(w ** 2, axis=-1, keepdims=True))
-        proj_x = (w @ x.T).T
-        proj_y = (w @ y.T).T
-        return proj_x, proj_y
+        self.perturbation_n_samples = perturbation_n_samples
+        self.perturbation_sigma = perturbation_sigma
+        self.perturbation_noise = perturbation_noise
 
     def fit(self, x, y):
         assert x.shape[:2] == y.shape[:2]
         n, d = x.shape[:2]
-        eta = .001
-
-        def action(w):
-            proj_x, proj_y = self.project_in_1d(x, y, w)
-            perturbed_costs = []
-            # Iterate over the perturbation dimension
-            for proj_x_i, proj_y_i in zip(proj_x.T, proj_y.T):
-                ind_x, ind_y, _ = self.partial_problem.fit(proj_x_i, proj_y_i)
-
-                sorted_ind_x = np.sort(ind_x)
-                sorted_ind_y = np.sort(ind_y)
-                subset_x = x[sorted_ind_x]
-                subset_y = y[sorted_ind_y]
-                cost = np.sum(np.abs(subset_x - subset_y))
-                perturbed_costs.append(cost)
-
-            return torch.tensor(perturbed_costs)
-        
-        pert_action = perturbations.perturbed(action,
-                                              num_samples=1000,
-                                              sigma=0.5,
-                                              noise='gumbel',
-                                              batched=False, 
-                                              device=self.device)
 
         min_cost = np.inf
         bool_indices_x, bool_indices_y = None, None
+        list_w = []
+        list_w_grad = []
         w = torch.tensor(self.draw_direction(d), requires_grad=True)
         if self.opt_lambda_fun is not None:
             opt = self.opt_lambda_fun([w])
         else:
-            opt = torch.optim.SGD([w], lr=0.01, momentum=0.9)
-        for _ in range(self.max_iter_gradient):
+            opt = torch.optim.SGD([w], lr=10., momentum=0.9)
+        list_costs = []
+        for iter in range(self.max_iter_gradient):
+            list_w.append(w.detach().numpy().copy())
             opt.zero_grad()
-            output = pert_action(w)
+            output = swgg_step(w, x, y, 
+                               self.max_iter_partial, 
+                               self.perturbation_n_samples, 
+                               self.perturbation_noise, 
+                               self.perturbation_sigma, 
+                               self.device)
             output.backward(torch.ones_like(output))
+            list_w_grad.append(w.grad.detach().numpy().copy())
             opt.step()
 
             cost = float(output)
-            print(cost)
+            print(f"Iter. {iter}, OT cost={cost} ", end="")
+            list_costs.append(cost)
 
             if cost < min_cost:
-                best_w = w.detach().numpy()
+                best_w = w.detach().numpy().copy()
                 min_cost = cost
+                print("(best iter so far)")
+            else:
+                print()
         
-        proj_x, proj_y = self.project_in_1d(x, y, best_w)
+        proj_x, proj_y = self.project_in_1d(x, y, torch.Tensor(best_w))
         ind_x, ind_y, _ = self.partial_problem.fit(proj_x, proj_y)
         
         bool_indices_x = np.array([(i in ind_x) for i in range(n)], dtype=bool)
         bool_indices_y = np.array([(i in ind_y) for i in range(n)], dtype=bool)
         
-        return min_cost, bool_indices_x, bool_indices_y
+        return min_cost, bool_indices_x, bool_indices_y, list_costs, best_w
 
 
 
 if __name__ == "__main__":
-    n = 100
-    d = 50
-    n_outliers = 10
+    import ot
+    import matplotlib.pyplot as plt
+    n = 1000
+    d = 20
+    n_outliers = 100
     np.random.seed(0)
+    torch.manual_seed(0)
 
-    outliers_x = np.random.choice(n, size=n_outliers, replace=False)
-    ind_outliers_x = np.zeros((n, d))
-    ind_outliers_x[outliers_x] = 1.5
-    x = np.random.rand(n, d) + ind_outliers_x
+    x = np.random.randn(n, d) * 3
+    y = np.random.randn(n, d)
 
-    outliers_y = np.random.choice(n, size=n_outliers, replace=False)
-    ind_outliers_y = np.zeros((n, d))
-    ind_outliers_y[outliers_y] = 1.5
-    y = np.random.rand(n, d) - ind_outliers_y
+    M = ot.dist(x, y, metric="minkowski", p=1)
+    cost = ot.partial.partial_wasserstein2([], [], M, m=(n - n_outliers) / n)
+    print(f"Exact cost: {cost}")
     
-    sliced = PerturbedMaheySlicedPartialOT(max_iter_gradient=5, 
-                                           max_iter_partial=n-n_outliers)  #, opt_lambda_fun=lambda param: torch.optim.Adam(param, lr=1e-3))
-    _, bool_ind_x, bool_ind_y = sliced.fit(x, y)
-    print("x")
-    print(np.sum(bool_ind_x), np.sum(bool_ind_x[outliers_x]))
-    print("y")
-    print(np.sum(bool_ind_y), np.sum(bool_ind_y[outliers_y]))
+    sliced = PerturbedPartialSWGG(max_iter_gradient=20, 
+                                           max_iter_partial=n-n_outliers, 
+                                           opt_lambda_fun=lambda param: torch.optim.SGD(param, lr=1e-2),
+                                           perturbation_n_samples=10 * 1000,
+                                           perturbation_sigma=.1,
+                                           perturbation_noise="normal")
+    _, bool_ind_x, bool_ind_y, list_costs, w = sliced.fit(x, y)
+
+    plt.plot(list_costs)
+    plt.axhline(y=cost, linestyle="dashed")
+    plt.show()

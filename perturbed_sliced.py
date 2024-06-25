@@ -144,6 +144,8 @@ class PerturbedPartialSWGG(SlicedPartialOT):
             output.backward(torch.ones_like(output))
             list_w_grad.append(w.grad.detach().numpy().copy())
             opt.step()
+            with torch.no_grad():
+                w /= torch.sqrt(torch.sum(w ** 2, axis=-1, keepdims=True))
 
             cost = float(output)
             print(f"Iter. {iter}, OT cost={cost} ", end="")
@@ -161,6 +163,9 @@ class PerturbedPartialSWGG(SlicedPartialOT):
         
         bool_indices_x = np.array([(i in ind_x) for i in range(n)], dtype=bool)
         bool_indices_y = np.array([(i in ind_y) for i in range(n)], dtype=bool)
+
+        self.list_w_ = list_w
+        self.list_w_grad_ = list_w_grad
         
         return min_cost, bool_indices_x, bool_indices_y, list_costs, best_w
 
@@ -170,26 +175,29 @@ if __name__ == "__main__":
     import ot
     import matplotlib.pyplot as plt
     n = 1000
-    d = 20
-    n_outliers = 100
+    d = 2
+    n_outliers = 1
     np.random.seed(0)
     torch.manual_seed(0)
 
     x = np.random.randn(n, d) * 3
     y = np.random.randn(n, d)
 
+    x[:, 1] /= 10
+    y[:, 1] /= 10
+
     M = ot.dist(x, y, metric="minkowski", p=1)
     cost = ot.partial.partial_wasserstein2([], [], M, m=(n - n_outliers) / n)
     print(f"Exact cost: {cost}")
     
-    sliced = PerturbedPartialSWGG(max_iter_gradient=20, 
+    sliced = PerturbedPartialSWGG(max_iter_gradient=50, 
                                            max_iter_partial=n-n_outliers, 
-                                           opt_lambda_fun=lambda param: torch.optim.SGD(param, lr=1e-2),
-                                           perturbation_n_samples=10 * 1000,
-                                           perturbation_sigma=.1,
+                                           opt_lambda_fun=lambda param: torch.optim.SGD(param, lr=1e-1),
+                                           perturbation_n_samples=500,
+                                           perturbation_sigma=.5,
                                            perturbation_noise="normal")
     _, bool_ind_x, bool_ind_y, list_costs, w = sliced.fit(x, y)
 
     plt.plot(list_costs)
-    plt.axhline(y=cost, linestyle="dashed")
+    # plt.axhline(y=cost, linestyle="dashed")
     plt.show()

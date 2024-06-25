@@ -4,11 +4,11 @@ import torch
 
 import matplotlib.pyplot as plt
 
-from perturbed_sliced import PerturbedPartialSWGG, swgg_step
+from perturbed_sliced import PerturbedPartialSWGG, swgg_step, compute_cost
 
 n = 100
 d = 2
-n_outliers = 10
+n_outliers = 0
 np.random.seed(0)
 torch.manual_seed(0)
 
@@ -17,7 +17,7 @@ y = np.random.randn(n, d)
 x[:, 1] /= 10
 y[:, 1] /= 10
 
-n_samples = 100
+n_samples = 200
 sigma=.1
 
 sliced = PerturbedPartialSWGG(max_iter_gradient=20, 
@@ -41,14 +41,7 @@ for i, theta in enumerate(np.linspace(-np.pi, np.pi, n_angles)):
     normal = np.array([-np.sin(theta), np.cos(theta)])
 
     # Cost
-    proj_x, proj_y = sliced.project_in_1d(x, y, w.detach().numpy())
-    ind_x, ind_y, marginal_costs = sliced.partial_problem.fit(proj_x, proj_y)
-
-    sorted_ind_x = np.sort(ind_x)
-    sorted_ind_y = np.sort(ind_y)
-    subset_x = x[sorted_ind_x]
-    subset_y = y[sorted_ind_y]
-    cost = np.sum(np.abs(subset_x - subset_y)) / (n - n_outliers)
+    cost = compute_cost(x, y, w.detach().numpy(), n - n_outliers)
     all_costs.append(cost)
 
     F_epsilon = swgg_step(w, x, y, n-n_outliers, n_samples, "normal", sigma, "cpu")

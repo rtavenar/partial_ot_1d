@@ -49,21 +49,24 @@ def project_in_1d(x, y, w):
     proj_y = (w @ y.T).T
     return proj_x, proj_y
 
-def swgg_score_theta(thetas, x, y, max_iter_partial):
-    proj_x, proj_y = project_in_1d(x, y, thetas)
-    perturbed_costs = []
+def compute_cost(x, y, w, max_iter_partial):
     partial_pb = PartialOT1d(max_iter_partial)
-    # Iterate over the perturbation dimension
-    for proj_x_i, proj_y_i in zip(proj_x.T, proj_y.T):
-        ind_x, ind_y, marginal_costs = partial_pb.fit(proj_x_i, proj_y_i)
+    proj_x, proj_y = project_in_1d(x, y, w)
+    ind_x, ind_y, marginal_costs = partial_pb.fit(proj_x, proj_y)
 
-        sorted_ind_x = np.sort(ind_x)
-        sorted_ind_y = np.sort(ind_y)
-        subset_x = x[sorted_ind_x]
-        subset_y = y[sorted_ind_y]
-        cost = np.sum(np.abs(subset_x - subset_y))
-        perturbed_costs.append(cost / ind_x.shape[0])
+    sorted_ind_x = np.argsort(proj_x[ind_x])
+    sorted_ind_y = np.argsort(proj_y[ind_y])
+    subset_x = x[ind_x][sorted_ind_x]
+    subset_y = y[ind_y][sorted_ind_y]
+    cost = np.sum(np.abs(subset_x - subset_y))
+    return cost / ind_x.shape[0]
 
+
+def swgg_score_theta(thetas, x, y, max_iter_partial):
+    perturbed_costs = [
+        compute_cost(x, y, theta, max_iter_partial) 
+        for theta in thetas
+    ]
     return torch.tensor(perturbed_costs)
 
 class SWGGStep(torch.autograd.Function):

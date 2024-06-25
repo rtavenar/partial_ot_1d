@@ -17,10 +17,13 @@ y = np.random.randn(n, d)
 x[:, 1] /= 10
 y[:, 1] /= 10
 
+n_samples = 100
+sigma=.1
+
 sliced = PerturbedPartialSWGG(max_iter_gradient=20, 
                               max_iter_partial=n-n_outliers, 
-                              perturbation_n_samples=100,
-                              perturbation_sigma=.1,
+                              perturbation_n_samples=n_samples,
+                              perturbation_sigma=sigma,
                               opt_lambda_fun=lambda param: torch.optim.SGD(param, lr=1e-1))
 _, bool_ind_x, bool_ind_y, list_costs, w = sliced.fit(x, y)
 list_w = sliced.list_w_
@@ -48,7 +51,7 @@ for i, theta in enumerate(np.linspace(-np.pi, np.pi, n_angles)):
     cost = np.sum(np.abs(subset_x - subset_y)) / (n - n_outliers)
     all_costs.append(cost)
 
-    F_epsilon = swgg_step(w, x, y, n-n_outliers, 100, "normal", .1, "cpu")
+    F_epsilon = swgg_step(w, x, y, n-n_outliers, n_samples, "normal", sigma, "cpu")
     all_F_epsilon.append(F_epsilon.detach().numpy())
 
     if i % 10 == 0:

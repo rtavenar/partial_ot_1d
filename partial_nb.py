@@ -504,7 +504,7 @@ def partial_ot_1d(x, y, max_iter):
 
 
 
-def partial_ot_1d_elbow(x, y, return_all_solutions=False):
+def partial_ot_1d_elbow(x, y, return_all_solutions=False, s = 0.01):
     """Main routine for the partial OT problem in 1D.
     
     Does:
@@ -556,7 +556,7 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False):
     indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=n)
     kneedle = KneeLocator(x=np.arange(len(marginal_costs)), 
                           y=np.cumsum(marginal_costs), 
-                          S=1.0, 
+                          S=0.01, 
                           curve="convex", 
                           direction="increasing")
     if kneedle.elbow is None:

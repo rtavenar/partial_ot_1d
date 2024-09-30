@@ -63,11 +63,11 @@ for n in values_for_n:
     timings_aistats22.append(sum_time_aistats22)
 
 plt.style.use(['science'])
-formatter = get_format("NeurIPS") # options: ICLR, ICML, NeurIPS, InfThesis
+formatter = get_format("ICLR-large") # options: ICLR, ICML, NeurIPS, InfThesis
 plt.figure(figsize=formatter.line_width_plot(aspect_ratio="normal"))
-plt.loglog(values_for_n, timings_ours, label="Our method")
+plt.loglog(values_for_n, timings_ours, label="PAWL")
 for l in lambdas_cvpr23:
-    plt.loglog(values_for_n, timings_cvpr23[l], label=f"OPT, $\lambda={l}$")  # (Bai et al, CVPR 2023)")
+    plt.loglog(values_for_n, timings_cvpr23[l], label=f"OPT, $\lambda={l} \cdot  \\text{{median}}(dists)$")  # (Bai et al, CVPR 2023)")
 plt.loglog(values_for_n, timings_aistats22, label=f"Fast-UOT, $\\rho_1 = \\rho_2 = {rho_aistats22}$")  # (Séjourné et al, AISTATS 2022)")
 plt.xlabel("Number of points in x (resp. y)")
 plt.ylabel("Average time (in seconds)")

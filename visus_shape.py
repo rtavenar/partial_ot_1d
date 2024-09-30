@@ -8,7 +8,7 @@ import matplotlib
 
 from baselines.cvpr23_bai_icp_xp import vis_param_list
 
-def shape_image(T_data,S_data, ax, param=None):
+def shape_image(T_data,S_data, ax, keep_centered=False, param=None):
     if param!=None:
         xlim,ylim,zlim,view_init,(dx,dy,dz)=param
         ax.set_xlim(xlim)
@@ -16,8 +16,8 @@ def shape_image(T_data,S_data, ax, param=None):
         ax.set_zlim(zlim)
         ax.view_init(view_init[0],view_init[1],vertical_axis=view_init[2])
         
-    ax.scatter(T_data[:,0]+dx,T_data[:,1]+dy,T_data[:,2]+dz,alpha=.5,s=.05,marker='.')#,c='C2')
-    ax.scatter(S_data[:,0]+dx,S_data[:,1]+dy,S_data[:,2]+dz,alpha=.5,s=.05,marker='.')#,c='C1')
+    ax.scatter(T_data[::5,0]+dx,T_data[::5,1]+dy,T_data[::5,2]+dz,alpha=1.,s=.5,marker='.')#,c='C2')
+    ax.scatter(S_data[::5,0]+dx,S_data[::5,1]+dy,S_data[::5,2]+dz,alpha=1.,s=.5,marker='.')#,c='C1')
     
     # ax.set_facecolor('black') 
     ax.set_xticks([])
@@ -26,19 +26,21 @@ def shape_image(T_data,S_data, ax, param=None):
     # ax.grid(True)
     # ax.axis('off')
 
-baselines = {"icp_du": "ICP (Du)",
+baselines = {
+    # "icp_du": "ICP (Du)",
              "spot_bonneel": "SPOT",
-             "sopt": "SOPT (uses $n_0$)", 
-             "ours_apriori": "Ours (uses $n_0$)", 
+             "sopt": "SOPT", 
+             "ours_apriori": "PAWL", 
             #  "swgg_apriori": "SWGG (uses $n_0$)", 
-             "ours_elbow": "Ours (elbow method)"
+             "ours_elbow": "PAWL (elbow)"
              }
-datasets = ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']
+datasets = ["stanford_bunny"]  #["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']
+timings = [30, 60, 10 ** 12]  #[-1, 30, 60, 10 ** 12]
 
 plt.style.use(['science'])
 matplotlib.rcParams.update({'font.size': 22})
 
-for seed in [0, 42, 1000]:
+for seed in [10]: #[0, 42, 1000]:
     for idx_p, problem in enumerate(datasets):
         for idx_pc, percent in enumerate([5, 7]):
             for idx_n, n_source in enumerate([9 * 1000, 10 * 1000]):
@@ -65,8 +67,8 @@ for seed in [0, 42, 1000]:
                     scalar_list = [init_scalar] + list(data_results["scalar_list"])
                     beta_list = [init_beta] + list(data_results["beta_list"])
                     timings_list = [0.0] + list(data_results["timings_list"])
-                    for idx_t, t in enumerate([-1, 20, 40, 60]):
-                        ax = fig.add_subplot(len(baselines), 4, idx_m * 4 + idx_t + 1, projection='3d')
+                    for idx_t, t in enumerate(timings):
+                        ax = fig.add_subplot(len(timings), len(baselines), idx_t * len(baselines) + idx_m + 1, projection='3d')
                         i = 0
                         while timings_list[i] < t:
                             i += 1
@@ -81,11 +83,14 @@ for seed in [0, 42, 1000]:
                         shape_image(target, transformed_source_data, param=vis_param_list[problem], ax=ax)
                         # print(ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d())
                         if idx_m == 0:
-                            if idx_t == 0:
-                                plt.title(f"At initialization")
+                            if t < 0:
+                                plt.ylabel(f"At initialization")
+                            elif i == len(timings_list) - 1:
+                                plt.ylabel(f"At convergence")
                             else:
-                                plt.title(f"After {t} seconds")
+                                plt.ylabel(f"After {t} seconds")
                         if idx_t == 0:
-                            plt.ylabel(baselines[method])
+                            plt.title(baselines[method])
                 plt.tight_layout()
+                plt.subplots_adjust(wspace=-0.2, hspace=-0.55)
                 plt.savefig(f"shape_figs/viz_{problem}_p{percent}_n_source{n_source}_seed{seed}.pdf")

@@ -84,7 +84,7 @@ class SWGGStep(torch.autograd.Function):
         additive_noise, noise_gradient = sample_noise_with_gradients(noise_type, perturbed_input_shape)
         additive_noise = additive_noise.to(device)
         noise_gradient = noise_gradient.to(device)
-        perturbed_input = theta.unsqueeze(0) + epsilon * additive_noise  # [N, D]
+        perturbed_input = theta + epsilon * additive_noise  # [N, D]
 
         # [...]
         # perturbed_output is [n_samples, ]
@@ -133,7 +133,7 @@ class PerturbedPartialSWGG(SlicedPartialOT):
         if self.opt_lambda_fun is not None:
             opt = self.opt_lambda_fun([w])
         else:
-            opt = torch.optim.SGD([w], lr=10., momentum=0.9)
+            opt = torch.optim.SGD([w], lr=.01, momentum=0.9)
         list_costs = []
         for iter in range(self.max_iter_gradient):
             list_w.append(w.detach().numpy().copy())
@@ -144,7 +144,7 @@ class PerturbedPartialSWGG(SlicedPartialOT):
                                self.perturbation_noise, 
                                self.perturbation_sigma, 
                                self.device)
-            output.backward(torch.ones_like(output))
+            output.backward()
             list_w_grad.append(w.grad.detach().numpy().copy())
             opt.step()
             with torch.no_grad():
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     import ot
     import matplotlib.pyplot as plt
     n = 1000
-    d = 2
+    d = 20
     n_outliers = 1
     np.random.seed(0)
     torch.manual_seed(0)
@@ -193,14 +193,15 @@ if __name__ == "__main__":
     cost = ot.partial.partial_wasserstein2([], [], M, m=(n - n_outliers) / n)
     print(f"Exact cost: {cost}")
     
-    sliced = PerturbedPartialSWGG(max_iter_gradient=50, 
+    sliced = PerturbedPartialSWGG(max_iter_gradient=100, 
                                            max_iter_partial=n-n_outliers, 
-                                           opt_lambda_fun=lambda param: torch.optim.SGD(param, lr=1e-1),
-                                           perturbation_n_samples=500,
-                                           perturbation_sigma=.5,
+                                        #    opt_lambda_fun=lambda param: torch.optim.SGD(param, lr=1e-1, momentum=.8),
+                                           opt_lambda_fun=lambda param: torch.optim.AdamW(param, lr=1e-1),
+                                           perturbation_n_samples=100,
+                                           perturbation_sigma=.1,
                                            perturbation_noise="normal")
     _, bool_ind_x, bool_ind_y, list_costs, w = sliced.fit(x, y)
 
     plt.plot(list_costs)
-    # plt.axhline(y=cost, linestyle="dashed")
+    plt.title(f"Partial OT cost is: {cost:.3f}")
     plt.show()

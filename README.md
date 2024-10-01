@@ -16,7 +16,7 @@ The main file is `partial.py`, which contains the following two functions:
 
 If your goal is to reproduce the results contained in the paper, you can:
 * reproduce Fig. 4 (timings) by running `timings_partial.py`
-* reproduce Fig. 5 (Gradient Flows) by running `partial_GF.ipynb`
+* reproduce Fig. 5 (Gradient Flows) by running `Figure5 - partialGF bimodal distributions.ipynb`
 * reproduce Table 1 and Fig. 6 (point cloud registration) by
     1. running `run_baselines_icp.py`
     2. gathering results using `visus_shape.py` and `tab_results_icp.py`

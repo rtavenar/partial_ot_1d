@@ -10,3 +10,6 @@ results_icp/
 shape_registration_error_vs_timings*.pdf
 shape_figs/
 tex_tmp/
+perturbed_sliced.py
+partial.py
+test_swgg_optim_1d.py

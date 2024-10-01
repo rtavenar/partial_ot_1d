@@ -10,6 +10,7 @@ class SlicedPartialOT:
 
     def draw_direction(self, d):
         w = np.random.randn(d)
+        w /= np.sqrt(np.sum(w ** 2, axis=-1, keepdims=True))
         return w
 
     def project_in_1d(self, x, y, w):

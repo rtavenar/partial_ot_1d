@@ -1,16 +1,7 @@
 import numpy as np
 import warnings
-import heapq
+from sortedcontainers import SortedList
 from kneed import KneeLocator
-
-
-def bisect_left(arr, x):
-    """Similar to bisect.bisect_left(), from the built-in library."""
-    M = len(arr)
-    for i in range(M):
-        if arr[i] >= x:
-            return i
-    return M
 
 
 class PartialOT1d:
@@ -217,12 +208,11 @@ class PartialOT1d:
                     cost = diff_cum_sum[idx_end]   - diff_cum_sum[idx_start - 1]
                 # i: start of the "group", "next_pos": end of the "group", abs(cost): cost of the group
                 if idx_end == idx_start + 1:
-                    l_costs.append((abs(cost), idx_start, idx_end))
+                    l_costs.append((idx_start, idx_end, abs(cost)))
                 self._group_starting_at[idx_start] = {"ends_at": idx_end, "cost": abs(cost)}
                 assert idx_end not in self._group_ending_at
                 self._group_ending_at[idx_end] = {"starts_at": idx_start, "cost": abs(cost)}
-        heapq.heapify(l_costs)
-        return l_costs, self.precompute_pack_costs_cumsum()
+        return SortedList(l_costs, key=lambda x: x[2]), self.precompute_pack_costs_cumsum()
     
     def precompute_pack_costs_cumsum(self):
         """For each position `i` at which a pack could end,
@@ -244,7 +234,7 @@ class PartialOT1d:
 
      
     @classmethod
-    def _insert_new_pack(cls, packs_starting_at, packs_ending_at, candidate_pack):
+    def _insert_new_pack(cls, packs: SortedList, candidate_pack):
         """Insert the `candidate_pack` into the sorted list of `packs`.
         `packs` is modified in-place and the pack in which the candidate 
         is inserted is returned.
@@ -276,13 +266,20 @@ class PartialOT1d:
         SortedKeyList([[2, 4], [6, 9]], key=<function <lambda> at ...>)
         """
         i, j = candidate_pack
-        if i - 1  in packs_ending_at:
-            i = packs_ending_at[i - 1]
-        if j + 1 in packs_starting_at:
-            j = packs_starting_at[j + 1]
-        packs_starting_at[i] = j
-        packs_ending_at[j] = i
-        return packs_starting_at, packs_ending_at, (i, j)
+        idx = packs.bisect_left(candidate_pack)
+        # Is `i` adjacent to `packs[idx - 1]` 
+        # or `j` adjacent to `packs[idx]`?
+        if idx > 0 and packs[idx - 1][1] == i - 1:
+            # Extend the pack up to `j`
+            p = packs.pop(idx - 1)
+            candidate_pack = [p[0], candidate_pack[1]]
+        idx = packs.bisect_left(candidate_pack)
+        if idx < len(packs) and packs[idx][0] == j + 1:
+            # Extend the pack from `i` on
+            p = packs.pop(idx)
+            candidate_pack = [candidate_pack[0], p[1]]
+        packs.add(candidate_pack)
+        return candidate_pack
     
     def _compute_cost_for_pack(self, idx_start, idx_end, pack_costs_cumsum):
         """Compute the associated cost for a pack (set of contiguous points
@@ -293,7 +290,7 @@ class PartialOT1d:
     def get_group_starting_at(self, i):
         return self._group_starting_at.get(i, {"ends_at": None, "cost": None})
 
-    def generate_solution_using_marginal_costs(self, costs, ranks_xy, pack_costs_cumsum):
+    def generate_solution_using_marginal_costs(self, costs: SortedList, ranks_xy, pack_costs_cumsum):
         """Generate a solution from a sorted list of group costs.
         See the note in `compute_costs` docs for a definition of groups.
 
@@ -316,23 +313,21 @@ class PartialOT1d:
         """
         max_iter = self.max_iter if self.max_iter != "elbow" else min(self.n_x, self.n_y)
         active_set = set()
-        packs_starting_at = {}
-        packs_ending_at = {}
+        packs = SortedList(key=lambda t: t[0])
         list_marginal_costs = []
         list_active_set_inserts = []
         while len(costs) > 0 and max_iter > len(active_set) // 2:
-            c, i, j = heapq.heappop(costs)
+            i, j, c = costs.pop(index=0)
             if i in active_set or j in active_set:
                 continue
             new_pack = None
             # Case 1: j == i + 1 => "Simple" insert
             if j == i + 1:
-                packs_starting_at, packs_ending_at, new_pack = PartialOT1d._insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
+                new_pack = PartialOT1d._insert_new_pack(packs, [i, j])
             # Case 2: insert a group that contains a pack
-            elif j - 1 in packs_ending_at:
-                del packs_starting_at[i + 1]
-                del packs_ending_at[j - 1]
-                packs_starting_at, packs_ending_at, new_pack = PartialOT1d._insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
+            elif [i + 1, j - 1] in packs:
+                packs.remove([i + 1, j - 1])
+                new_pack = PartialOT1d._insert_new_pack(packs, [i, j])
             # There should be no "Case 3"
             else:
                 self._print_current_status(active_set, i, j)
@@ -346,10 +341,20 @@ class PartialOT1d:
             if p_s == 0 or p_e == self.n_x + self.n_y - 1:
                 continue
             if self.sorted_distrib_indicator[p_s - 1] != self.sorted_distrib_indicator[p_e + 1]:
+                # If (p_s - 1, p_s) and (p_e, p_e + 1) are groups, remove them
+                if (self.get_group_starting_at(p_s - 1)["ends_at"] == p_s 
+                        and self.get_group_starting_at(p_e)["ends_at"] == p_e + 1):
+                    # Below we use discard instead of remove (discard does not throw an error
+                    # if the item is not in the list) since it could be that the group 
+                    # has already been removed beforehand because of an overlap with
+                    # another pack
+                    costs.discard((p_s - 1, p_s, self.get_group_starting_at(p_s - 1)["cost"]))
+                    costs.discard((p_e, p_e + 1, self.get_group_starting_at(p_e)["cost"]))
+
                 # Insert (p_s - 1, p_e + 1) as a new pseudo-group with marginal cost
                 marginal_cost = (self._compute_cost_for_pack(p_s - 1, p_e + 1, pack_costs_cumsum)
                                  - self._compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
-                heapq.heappush(costs, (marginal_cost, p_s - 1, p_e + 1))
+                costs.add((p_s - 1, p_e + 1, marginal_cost))
 
         # Generate index arrays in the order of insertion in the active set
         indices_sorted_x = np.array([ranks_xy[i] 

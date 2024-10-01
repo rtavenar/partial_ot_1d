@@ -1,8 +1,5 @@
-tensorflow==2.15
-tensorflow_probability==0.23
 numpy
 matplotlib
 SciencePlots
 mpl_sizes
 pot==0.9.3
-pyminiply  # for ICP data preparation, useless otherwise

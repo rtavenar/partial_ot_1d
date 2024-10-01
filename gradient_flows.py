@@ -4,8 +4,8 @@ import numpy as np
 import torch
 import ot
 
-from partial_nb import partial_ot_1d
-from partial_nb import partial_ot_1d_elbow
+from partial import partial_ot_1d
+from partial import partial_ot_1d_elbow
 
 
 

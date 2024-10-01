@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import scienceplots
 from mpl_sizes import get_format
 
-from partial_nb import partial_ot_1d
+from partial import partial_ot_1d
 from baselines.cvpr23_bai import solve_opt as CVPR23Bai_partial_solver
 from baselines.aistats22_sejourne import solve_uot as AISTATS22Sejourne_unbalanced_solver
 
@@ -12,7 +12,7 @@ np.random.seed(0)
 n_repeat = 3
 
 values_for_n =  [1000, 3000, 10000, 30000, 100000, 300000, 1000000]
-timings_ours = []
+timings_pawl = []
 timings_aistats22 = []
 lambdas_cvpr23 = [1e-3]  # lambda_hat = lambda / median_dist
 rho_aistats22 = 1.
@@ -26,7 +26,7 @@ AISTATS22Sejourne_unbalanced_solver(np.ones(10), np.ones(10),
 partial_ot_1d(np.random.rand(10), np.random.rand(10), max_iter=10)
 
 for n in values_for_n:
-    sum_time_ours = 0.
+    sum_time_pawl = 0.
     sum_time_aistats22 = 0.
     sum_time_cvpr23 = {k: 0. for k in lambdas_cvpr23}
     transported_mass_cvpr23 = {k: [] for k in lambdas_cvpr23}
@@ -35,10 +35,10 @@ for n in values_for_n:
         y = np.random.rand(n)
         med_dist = np.median((np.sort(x) - np.sort(y)) ** 2)
 
-        # Ours
+        # PAWL
         t0 = time.time()
         partial_ot_1d(x, y, max_iter=n)
-        sum_time_ours += (time.time() - t0)
+        sum_time_pawl += (time.time() - t0)
 
         # CVPR23
         for l in lambdas_cvpr23:
@@ -56,7 +56,7 @@ for n in values_for_n:
             p=1, rho1=rho_aistats22, rho2=rho_aistats22
         )
         sum_time_aistats22 += (time.time() - t0)
-    timings_ours.append(sum_time_ours / n_repeat)
+    timings_pawl.append(sum_time_pawl / n_repeat)
     for l in lambdas_cvpr23:
         timings_cvpr23[l].append(sum_time_cvpr23[l] / n_repeat)
         print(f"n={n:07d}, transported masses for lambda={l}: {transported_mass_cvpr23[l]}")
@@ -65,7 +65,7 @@ for n in values_for_n:
 plt.style.use(['science'])
 formatter = get_format("ICLR-large") # options: ICLR, ICML, NeurIPS, InfThesis
 plt.figure(figsize=formatter.line_width_plot(aspect_ratio="normal"))
-plt.loglog(values_for_n, timings_ours, label="PAWL")
+plt.loglog(values_for_n, timings_pawl, label="PAWL")
 for l in lambdas_cvpr23:
     plt.loglog(values_for_n, timings_cvpr23[l], label=f"OPT, $\lambda={l} \cdot  \\text{{median}}(dists)$")  # (Bai et al, CVPR 2023)")
 plt.loglog(values_for_n, timings_aistats22, label=f"Fast-UOT, $\\rho_1 = \\rho_2 = {rho_aistats22}$")  # (Séjourné et al, AISTATS 2022)")

@@ -27,20 +27,18 @@ def shape_image(T_data,S_data, ax, keep_centered=False, param=None):
     # ax.axis('off')
 
 baselines = {
-    # "icp_du": "ICP (Du)",
              "spot_bonneel": "SPOT",
              "sopt": "SOPT", 
-             "ours_apriori": "PAWL", 
-            #  "swgg_apriori": "SWGG (uses $n_0$)", 
-             "ours_elbow": "PAWL (elbow)"
+             "pawl_apriori": "PAWL", 
+             "pawl_elbow": "PAWL (elbow)"
              }
-datasets = ["stanford_bunny"]  #["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']
-timings = [30, 60, 10 ** 12]  #[-1, 30, 60, 10 ** 12]
+datasets = ["stanford_bunny"]
+timings = [30, 60, 10 ** 12]
 
 plt.style.use(['science'])
 matplotlib.rcParams.update({'font.size': 22})
 
-for seed in [10]: #[0, 42, 1000]:
+for seed in [10]:
     for idx_p, problem in enumerate(datasets):
         for idx_pc, percent in enumerate([5, 7]):
             for idx_n, n_source in enumerate([9 * 1000, 10 * 1000]):
@@ -52,10 +50,6 @@ for seed in [10]: #[0, 42, 1000]:
                 init_rot = np.eye(3)
                 init_scalar = 1.
                 init_beta = target.mean(axis=0) - source.mean(axis=0)
-
-                # formatter = get_format("NeurIPS") # options: ICLR, ICML, NeurIPS, InfThesis
-                # figx, figy = formatter.line_width_plot(aspect_ratio="normal")
-                # fig = plt.figure(figsize=(1.5 * figx, 1.5 * figy))
                 fig = plt.figure(figsize=(20, 20))
 
                 for idx_m, method in enumerate(baselines.keys()):
@@ -81,7 +75,6 @@ for seed in [10]: #[0, 42, 1000]:
                         beta = beta_list[i]
                         transformed_source_data = source @ rotation * scalar + beta
                         shape_image(target, transformed_source_data, param=vis_param_list[problem], ax=ax)
-                        # print(ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d())
                         if idx_m == 0:
                             if t < 0:
                                 plt.ylabel(f"At initialization")

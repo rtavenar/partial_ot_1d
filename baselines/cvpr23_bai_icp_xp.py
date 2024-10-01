@@ -12,7 +12,7 @@ import time
 
 from .cvpr23_bai import * 
 import matplotlib.pyplot as plt
-from partial_nb import partial_ot_1d, partial_ot_1d_elbow
+from partial import partial_ot_1d, partial_ot_1d_elbow
 from sliced import PartialSWGG
 
 @nb.njit(['float64[:,:](int64,int64,int64)'],fastmath=True,cache=True)
@@ -890,7 +890,7 @@ def sopt_main(S,T,n_iterations,N0):
 # our method
 #@nb.njit(['Tuple((float64[:,:,:],float64[:],float64[:,:]))(float64[:,:],float64[:,:],int64,int64)'])
 # @nb.njit(['Tuple((float64[:,:,:],float64[:],float64[:,:],float64[:]))(float64[:,:],float64[:,:],int64,int64)'],cache=True)
-def ours_main(S,T,n_iterations,N0):
+def pawl_main(S,T,n_iterations,N0):
     '''
     Parameters: 
     ------

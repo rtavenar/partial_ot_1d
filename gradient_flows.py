@@ -6,7 +6,7 @@ from torch import optim
 import ot
 from scipy.stats import ortho_group, random_correlation
 
-from partial_nb import partial_ot_1d
+from partial import partial_ot_1d
 
 
 from sklearn.datasets import make_swiss_roll, make_moons, make_circles, make_blobs,make_spd_matrix

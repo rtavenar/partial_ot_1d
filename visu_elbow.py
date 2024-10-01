@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from partial_nb import partial_ot_1d_elbow
+from partial import partial_ot_1d_elbow
 
 n = 30
 np.random.seed(0)

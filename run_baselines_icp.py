@@ -2,27 +2,23 @@ import numpy as np
 import torch
 
 from baselines.cvpr23_bai_icp_xp import (shape_image, 
-                                         vis_param_list, 
-                                         icp_du, 
+                                         vis_param_list,
                                          spot_bonneel, 
                                          sopt_main, 
-                                         ours_main, 
-                                         swgg_main)
+                                         pawl_main)
 
 viz = False
 
-for seed in [10]: #[0, 42, 10, 100, 1000]:
-    for problem in ['stanford_bunny']: #["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
+for seed in [0, 42, 10, 100, 1000]:
+    for problem in ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
         for percent in [7]: #[5, 7]:
             for n_source in [9 * 1000, 10 * 1000]:
                 np.random.seed(seed)
                 baseline_fun = {
-                    # "icp_du": lambda s, t: icp_du(s, t, n_iterations=200),
-                    # "spot_bonneel": lambda s, t: spot_bonneel(s, t, n_projections=20, n_iterations=200),
+                    "spot_bonneel": lambda s, t: spot_bonneel(s, t, n_projections=20, n_iterations=200),
                     "sopt": lambda s, t: sopt_main(s, t, n_iterations=8000, N0=n_source),  # N0=# of clean source data points
-                    # "ours_apriori": lambda s, t: ours_main(s, t, n_iterations=40000, N0=n_source),  # N0=# of clean source data points
-                    # "ours_elbow": lambda s, t: ours_main(s, t, n_iterations=40000, N0="elbow"),
-                    # "swgg_apriori": lambda s, t: swgg_main(s, t, n_iterations=1000, N0=n_source, n_proj=5),
+                    "pawl_apriori": lambda s, t: pawl_main(s, t, n_iterations=40000, N0=n_source),  # N0=# of clean source data points
+                    "pawl_elbow": lambda s, t: pawl_main(s, t, n_iterations=40000, N0="elbow"),
                 }
                 for baseline in baseline_fun.keys():
                     print(problem, percent, n_source, baseline)

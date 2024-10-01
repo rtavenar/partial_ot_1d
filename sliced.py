@@ -1,6 +1,6 @@
 import numpy as np
 
-from partial_nb import partial_ot_1d
+from partial import partial_ot_1d
 
 
 class SlicedPartialOT:

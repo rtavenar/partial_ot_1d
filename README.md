@@ -1,6 +1,7 @@
 # PArtial Wasserstein on the Line (PAWL)
 
-This repository contains code for the PAWL method presented.
+This repository contains code for the PAWL method presented in the paper 
+"One for all and all for one: Efficient computation of partial optimal transports on the real line".
 
 The main file is `partial.py`, which contains the following two functions:
 * `partial_ot_1d(x, y, max_iter)` where `x` and `y` are numpy arrays of 

@@ -34,87 +34,94 @@ def bisect_left(arr, x):
     return M
 
 @njit(cache=True, fastmath=True)
-def insert_new_pack(packs_starting_at, packs_ending_at, candidate_pack):
-    """Insert the `candidate_pack` into the already known packs stored in 
-    `packs_starting_at` and `packs_ending_at`.
-    `packs_starting_at` and `packs_ending_at` are modified in-place and 
-    the pack in which the candidate is inserted is returned.
+def insert_new_chain(chains_starting_at, chains_ending_at, candidate_chain):
+    """Insert the `candidate_chain` into the already known chains stored in 
+    `chains_starting_at` and `chains_ending_at`.
+    `chains_starting_at` and `chains_ending_at` are modified in-place and 
+    the chain in which the candidate is inserted is returned.
 
     Examples
     --------
-    >>> packs_starting_at = {2: 4, 8: 9}
-    >>> packs_ending_at = {4: 2, 9: 8}
-    >>> insert_new_pack(packs_starting_at, packs_ending_at, [5, 7])
+    >>> chains_starting_at = {2: 4, 8: 9}
+    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> insert_new_chain(chains_starting_at, chains_ending_at, [5, 7])
     (2, 9)
-    >>> packs_starting_at
+    >>> chains_starting_at
     {2: 9}
     >>> 
-    >>> packs_starting_at = {2: 4, 8: 9}
-    >>> packs_ending_at = {4: 2, 9: 8}
-    >>> insert_new_pack(packs_starting_at, packs_ending_at, [11, 12])
+    >>> chains_starting_at = {2: 4, 8: 9}
+    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> insert_new_chain(chains_starting_at, chains_ending_at, [11, 12])
     (11, 12)
-    >>> packs_starting_at
+    >>> chains_starting_at
     {2: 4, 8: 9, 11: 12}
     >>> 
-    >>> packs_starting_at = {2: 4, 8: 9}
-    >>> packs_ending_at = {4: 2, 9: 8}
-    >>> insert_new_pack(packs_starting_at, packs_ending_at, [5, 6])
+    >>> chains_starting_at = {2: 4, 8: 9}
+    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> insert_new_chain(chains_starting_at, chains_ending_at, [5, 6])
     (2, 6)
-    >>> packs_starting_at
+    >>> chains_starting_at
     {2: 6, 8: 9}
     >>> 
-    >>> packs_starting_at = {2: 4, 8: 9}
-    >>> packs_ending_at = {4: 2, 9: 8}
-    >>> insert_new_pack(packs_starting_at, packs_ending_at, [6, 7])
+    >>> chains_starting_at = {2: 4, 8: 9}
+    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> insert_new_chain(chains_starting_at, chains_ending_at, [6, 7])
     (6, 9)
-    >>> packs_starting_at
+    >>> chains_starting_at
     {2: 4, 6: 9}
     """
-    i, j = candidate_pack
-    if i - 1  in packs_ending_at:
-        i = packs_ending_at[i - 1]
-    if j + 1 in packs_starting_at:
-        j = packs_starting_at[j + 1]
-    if i in packs_starting_at:
-        del packs_ending_at[packs_starting_at[i]]
-    packs_starting_at[i] = j
-    if j in packs_ending_at:
-        del packs_starting_at[packs_ending_at[j]]
-    packs_ending_at[j] = i
+    i, j = candidate_chain
+    if i - 1  in chains_ending_at:
+        i = chains_ending_at[i - 1]
+    if j + 1 in chains_starting_at:
+        j = chains_starting_at[j + 1]
+    if i in chains_starting_at:
+        del chains_ending_at[chains_starting_at[i]]
+    chains_starting_at[i] = j
+    if j in chains_ending_at:
+        del chains_starting_at[chains_ending_at[j]]
+    chains_ending_at[j] = i
     return i, j
 
 @njit(cache=True, fastmath=True)
-def compute_cost_for_pack(idx_start, idx_end, pack_costs_cumsum):
-    """Compute the associated cost for a pack (set of contiguous points
+def compute_cost_for_chain(idx_start, idx_end, chain_costs_cumsum):
+    """Compute the associated cost for a chain (set of contiguous points
     included in the solution) ranging from `idx_start` to `idx_end` (both included).
     """
-    return pack_costs_cumsum[idx_end] - pack_costs_cumsum.get(idx_start - 1, 0)
+    return chain_costs_cumsum[idx_end] - chain_costs_cumsum.get(idx_start - 1, 0)
 
 @njit(cache=True, fastmath=True)
-def precompute_pack_costs_cumsum(group_ending_at, n):
-    """For each position `i` at which a pack could end,
-    Compute (using dynamic programming and the costs of groups that have been precomputed)
-    the cost of the largest pack ending at `i`.
+def precompute_chain_costs_cumsum(minimal_chain_ending_at, n):
+    """For each position `i` at which a chain could end,
+    Compute (using dynamic programming and the costs of minimal chains that have been precomputed)
+    the cost of the largest chain ending at `i`.
 
-    This is useful because this can be used later, to compute the cost of any pack in O(1)
-    (cf. `compute_cost_for_pack`).
+    This is useful because this can be used later, to compute the cost of any chain in O(1)
+    (cf. `compute_cost_for_chain`).
     """
-    pack_costs_cumsum = Dict.empty(key_type=types.int64, value_type=types.float64)
+    chain_costs_cumsum = Dict.empty(key_type=types.int64, value_type=types.float64)
     for i in range(n):
-        # If there is a group ending there
-        # (if not, this cannot be the end of a pack)
-        if i in group_ending_at:
-            start, additional_cost = group_ending_at[i]
-            pack_costs_cumsum[i] = pack_costs_cumsum.get(start - 1, 0) + additional_cost
-    return pack_costs_cumsum
+        # If there is a minimal chain ending there
+        # (if not, this cannot be the end of a chain)
+        if i in minimal_chain_ending_at:
+            start, additional_cost = minimal_chain_ending_at[i]
+            chain_costs_cumsum[i] = chain_costs_cumsum.get(start - 1, 0) + additional_cost
+    return chain_costs_cumsum
+
+@njit(cache=True, fastmath=True)
+def get_cost(diff_cum_sum, idx_start, idx_end):
+    if idx_start == 0:
+        return diff_cum_sum[idx_end] # - 0
+    else:
+        return diff_cum_sum[idx_end]   - diff_cum_sum[idx_start - 1]
 
 @njit(cache=True, fastmath=True)
 def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
-    """For each element in sorted `x`, compute its group (cf note below).
-    Then compute the cost for each group and sort all groups in increasing 
+    """For each element in sorted `z`, compute its minimal chain (cf note below).
+    Then compute the cost for each minimal chain and sort all minimal chains in increasing 
     cost order.
 
-    Note: the "group" of a point x_i in x is the minimal set of adjacent 
+    Note: the "minimal chain" of a point x_i in x is the minimal set of adjacent 
     points (starting at x_i and extending to the right) that one should 
     take to get a balanced set (ie. a set in which we have as many 
     elements from x as elements from y)
@@ -126,19 +133,19 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
     >>> diff_cum_sum = compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)
     >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
-    >>> costs, pack_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    >>> costs, chain_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
     >>> list(costs)
     [(1.0, 1, 2), (1.0, 3, 4), (5.0, 5, 6)]
     """
     l_costs = [(0.0, 0, 0) for _ in range(0)]
-    group_ending_at = {}
+    minimal_chain_ending_at = {}
     last_pos_for_rank_x = Dict.empty(key_type=int64, value_type=int64)
     last_pos_for_rank_y = Dict.empty(key_type=int64, value_type=int64)
     n = len(diff_ranks)
     for idx_end in range(n):
         # For each item in either distrib, find the scope of the smallest
-        # "group" that would end at that point and extend on the left, 
-        # if one exists, and store the cost of this "group" by relying 
+        # "minimal chain" that would end at that point and extend on the left, 
+        # if one exists, and store the cost of this "minimal chain" by relying 
         # on differences of cumulative sums
         cur_rank = diff_ranks[idx_end]
         idx_start = -1
@@ -153,15 +160,12 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
                 idx_start = last_pos_for_rank_x[target_rank]
             last_pos_for_rank_y[cur_rank] = idx_end
         if idx_start != -1:
-            if idx_start == 0:
-                cost = diff_cum_sum[idx_end] # - 0
-            else:
-                cost = diff_cum_sum[idx_end]   - diff_cum_sum[idx_start - 1]
+            cost = get_cost(diff_cum_sum, idx_start, idx_end)
             if idx_end == idx_start + 1:
                 heapq.heappush(l_costs, (abs(cost), idx_start, idx_end))
-            assert idx_end not in group_ending_at
-            group_ending_at[idx_end] = (idx_start, abs(cost))
-    return l_costs, precompute_pack_costs_cumsum(group_ending_at, n)
+            assert idx_end not in minimal_chain_ending_at
+            minimal_chain_ending_at[idx_end] = (idx_start, abs(cost))
+    return l_costs, precompute_chain_costs_cumsum(minimal_chain_ending_at, n)
 
 @njit(cache=True, fastmath=True)
 def arg_insert_in_sorted(sorted_x, sorted_y):
@@ -229,9 +233,9 @@ def preprocess(x, y):
     return indices_sort_x, indices_sort_y, indices_sort_xy, sorted_distrib_indicator
 
 @njit(cache=True, fastmath=True)
-def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, max_iter, sorted_distrib_indicator):
-    """Generate a solution from a sorted list of group costs.
-    See the note in `compute_costs` docs for a definition of groups.
+def generate_solution_using_marginal_costs(costs, ranks_xy, chain_costs_cumsum, max_iter, sorted_distrib_indicator):
+    """Generate a solution from a sorted list of minimal chain costs.
+    See the note in `compute_costs` docs for a definition of minimal chains.
 
     The solution is a pair of lists. The first list contains the indices from `sorted_x`
     that are in the active set, and the second one contains the indices from `sorted_y`
@@ -247,13 +251,13 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
     >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
     >>> diff_cum_sum = compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)
     >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
-    >>> costs, pack_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
-    >>> generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, 3, sorted_distrib_indicator)
+    >>> costs, chain_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    >>> generate_solution_using_marginal_costs(costs, ranks_xy, chain_costs_cumsum, 3, sorted_distrib_indicator)
     (array([1, 2, 3]), array([0, 1, 2]), [1.0, 1.0, 5.0])
     """
     active_set = set()
-    packs_starting_at = Dict.empty(key_type=int64, value_type=int64)
-    packs_ending_at = Dict.empty(key_type=int64, value_type=int64)
+    chains_starting_at = Dict.empty(key_type=int64, value_type=int64)
+    chains_ending_at = Dict.empty(key_type=int64, value_type=int64)
     list_marginal_costs = []
     list_active_set_inserts = []
     n = len(sorted_distrib_indicator)
@@ -261,15 +265,15 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
         c, i, j = heapq.heappop(costs)
         if i in active_set or j in active_set:
             continue
-        new_pack = None
+        new_chain = None
         # Case 1: j == i + 1 => "Simple" insert
         if j == i + 1:
-            new_pack = insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
-        # Case 2: insert a group that contains a pack
-        elif j - 1 in packs_ending_at:
-            del packs_starting_at[i + 1]
-            del packs_ending_at[j - 1]
-            new_pack = insert_new_pack(packs_starting_at, packs_ending_at, [i, j])
+            new_chain = insert_new_chain(chains_starting_at, chains_ending_at, [i, j])
+        # Case 2: insert a chain that contains a chain
+        elif j - 1 in chains_ending_at:
+            del chains_starting_at[i + 1]
+            del chains_ending_at[j - 1]
+            new_chain = insert_new_chain(chains_starting_at, chains_ending_at, [i, j])
         # There should be no "Case 3"
         else:
             raise ValueError
@@ -277,14 +281,14 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, pack_costs_cumsum, m
         list_active_set_inserts.append((i, j))
         list_marginal_costs.append(c)
         
-        # We now need to update the groups wrt the pack we have just created
-        p_s, p_e = new_pack
+        # We now need to update the candidate chains wrt the chain we have just created
+        p_s, p_e = new_chain
         if p_s == 0 or p_e == n - 1:
             continue
         if sorted_distrib_indicator[p_s - 1] != sorted_distrib_indicator[p_e + 1]:
-            # Insert (p_s - 1, p_e + 1) as a new pseudo-group with marginal cost
-            marginal_cost = (compute_cost_for_pack(p_s - 1, p_e + 1, pack_costs_cumsum)
-                             - compute_cost_for_pack(p_s, p_e, pack_costs_cumsum))
+            # Insert (p_s - 1, p_e + 1) as a new candidate chain with marginal cost
+            marginal_cost = (compute_cost_for_chain(p_s - 1, p_e + 1, chain_costs_cumsum)
+                             - compute_cost_for_chain(p_s, p_e, chain_costs_cumsum))
             heapq.heappush(costs, (marginal_cost, p_s - 1, p_e + 1))
 
     # Generate index arrays in the order of insertion in the active set
@@ -385,7 +389,7 @@ def _insert_constant_values_float(arr, distrib_index, sorted_distrib_indicator):
 
 @njit(cache=True, fastmath=True)
 def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
-    """Precompute important rank-related quantities for better group generation.
+    """Precompute important rank-related quantities for better minimal chain extraction.
     
     Two quantities are returned:
 
@@ -440,7 +444,7 @@ def partial_ot_1d(x, y, max_iter):
     
     1. Preprocessing of the distribs (sorted & co)
     2. Precomputations (ranks, cumulative sums)
-    3. Extraction of groups
+    3. Extraction of minimal chains
     4. Generate and return solution
 
     Note that the indices in `indices_x` and `indices_y` are ordered wrt their order of
@@ -486,13 +490,13 @@ def partial_ot_1d(x, y, max_iter):
                                                       sorted_distrib_indicator)
     ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
 
-    # Compute costs for "groups"
-    costs, pack_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    # Compute costs for "minimal chains"
+    costs, chain_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
 
     # Generate solution from sorted costs
     sol_indices_x_sorted, sol_indices_y_sorted, sol_costs = generate_solution_using_marginal_costs(costs, 
                                                                                                    ranks_xy, 
-                                                                                                   pack_costs_cumsum, 
+                                                                                                   chain_costs_cumsum, 
                                                                                                    max_iter, 
                                                                                                    sorted_distrib_indicator)
 
@@ -511,7 +515,7 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False):
     
     1. Preprocessing of the distribs (sorted & co)
     2. Precomputations (ranks, cumulative sums)
-    3. Extraction of groups
+    3. Extraction of minimal chains
     4. Generate and return solution
     
     Here, the elbow method is used to compute the optimal partial problem size.

@@ -2,12 +2,13 @@
 This file contains a numba oriented implementation of the partial OT in 1D.
 The main functions to be used outside this file are:
 
-* `partial_ot_1d(x, y, max_iter)` where `x` and `y` are numpy arrays of 
+* `partial_ot_1d(x, y, max_iter, p=1)` where `x` and `y` are numpy arrays of 
   shape (n, ) and (m, ) and `max_iter` is the number of pairs one wants to 
-  include in the solution. Note however that all partial solutions of size
+  include in the solution and `p` indicates which partial Wasserstein distance 
+  should be computed. Note however that all partial solutions of size
   lower than `max_iter` can be retrieved from the output of this function
   (see docs of the function for more details)
-* `partial_ot_1d_elbow(x, y)` where `x` and `y` are numpy arrays of 
+* `partial_ot_1d_elbow(x, y, p=1)` where `x` and `y` are numpy arrays of 
   shape (n, ) and (m, ). In this alternative implementation, the number of 
   pairs to be included in the solution is inferred using the elbow method on
   the series of costs of partial solutions (see docs of the function for 
@@ -42,33 +43,49 @@ def insert_new_chain(chains_starting_at, chains_ending_at, candidate_chain):
 
     Examples
     --------
-    >>> chains_starting_at = {2: 4, 8: 9}
-    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> chains_starting_at = Dict()
+    >>> chains_starting_at[2] = 4
+    >>> chains_starting_at[8] = 9
+    >>> chains_ending_at = Dict()
+    >>> chains_ending_at[4] = 2
+    >>> chains_ending_at[9] = 8
     >>> insert_new_chain(chains_starting_at, chains_ending_at, [5, 7])
     (2, 9)
     >>> chains_starting_at
-    {2: 9}
+    DictType[int64,int64]<iv=None>({2: 9})
     >>> 
-    >>> chains_starting_at = {2: 4, 8: 9}
-    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> chains_starting_at = Dict()
+    >>> chains_starting_at[2] = 4
+    >>> chains_starting_at[8] = 9
+    >>> chains_ending_at = Dict()
+    >>> chains_ending_at[4] = 2
+    >>> chains_ending_at[9] = 8
     >>> insert_new_chain(chains_starting_at, chains_ending_at, [11, 12])
     (11, 12)
     >>> chains_starting_at
-    {2: 4, 8: 9, 11: 12}
+    DictType[int64,int64]<iv=None>({2: 4, 8: 9, 11: 12})
     >>> 
-    >>> chains_starting_at = {2: 4, 8: 9}
-    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> chains_starting_at = Dict()
+    >>> chains_starting_at[2] = 4
+    >>> chains_starting_at[8] = 9
+    >>> chains_ending_at = Dict()
+    >>> chains_ending_at[4] = 2
+    >>> chains_ending_at[9] = 8
     >>> insert_new_chain(chains_starting_at, chains_ending_at, [5, 6])
     (2, 6)
     >>> chains_starting_at
-    {2: 6, 8: 9}
+    DictType[int64,int64]<iv=None>({2: 6, 8: 9})
     >>> 
-    >>> chains_starting_at = {2: 4, 8: 9}
-    >>> chains_ending_at = {4: 2, 9: 8}
+    >>> chains_starting_at = Dict()
+    >>> chains_starting_at[2] = 4
+    >>> chains_starting_at[8] = 9
+    >>> chains_ending_at = Dict()
+    >>> chains_ending_at[4] = 2
+    >>> chains_ending_at[9] = 8
     >>> insert_new_chain(chains_starting_at, chains_ending_at, [6, 7])
     (6, 9)
     >>> chains_starting_at
-    {2: 4, 6: 9}
+    DictType[int64,int64]<iv=None>({2: 4, 6: 9})
     """
     i, j = candidate_chain
     if i - 1  in chains_ending_at:
@@ -108,15 +125,37 @@ def precompute_chain_costs_cumsum(minimal_chain_ending_at, n):
             chain_costs_cumsum[i] = chain_costs_cumsum.get(start - 1, 0) + additional_cost
     return chain_costs_cumsum
 
+
 @njit(cache=True, fastmath=True)
-def get_cost(diff_cum_sum, idx_start, idx_end):
+def get_cost_w1(diff_cum_sum, idx_start, idx_end):
     if idx_start == 0:
         return diff_cum_sum[idx_end] # - 0
     else:
         return diff_cum_sum[idx_end]   - diff_cum_sum[idx_start - 1]
 
+
 @njit(cache=True, fastmath=True)
-def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
+def get_cost_wp(sorted_z, sorted_distrib_indicator, idx_start, idx_end, p):
+    """TODO
+
+    Examples
+    --------
+    >>> sorted_z = np.array([1., 2., 3., 4., 5., 6., 11., 12.])
+    >>> sorted_distrib_indicator = np.array([0, 0, 1, 1, 0, 0, 1, 1])
+    >>> get_cost_wp(sorted_z, sorted_distrib_indicator, 0, 3, p=2)
+    8.0
+    >>> get_cost_wp(sorted_z, sorted_distrib_indicator, 4, 7, p=2)
+    72.0
+    """
+    subset_z = sorted_z[idx_start:idx_end+1]
+    subset_indicator = sorted_distrib_indicator[idx_start:idx_end+1]
+    subset_x = subset_z[subset_indicator == 0]
+    subset_y = subset_z[subset_indicator == 1]
+    return np.sum(np.abs(subset_x - subset_y) ** p)
+
+
+@njit(cache=True, fastmath=True)
+def compute_costs(sorted_z, diff_cum_sum, diff_ranks, sorted_distrib_indicator, p=1):
     """For each element in sorted `z`, compute its minimal chain (cf note below).
     Then compute the cost for each minimal chain and sort all minimal chains in increasing 
     cost order.
@@ -130,10 +169,11 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
     --------
     >>> x = np.array([1., 2., 5., 6.])
     >>> y = np.array([3., 4., 11., 12.])
-    >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> ind_x, ind_y, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> sorted_z = np.concatenate((x[ind_x], y[ind_y]))[indices_sort_xy]
     >>> diff_cum_sum = compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)
     >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
-    >>> costs, chain_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    >>> costs, chain_costs_cumsum = compute_costs(sorted_z, diff_cum_sum, diff_ranks, sorted_distrib_indicator, p=1)
     >>> list(costs)
     [(1.0, 1, 2), (1.0, 3, 4), (5.0, 5, 6)]
     """
@@ -160,7 +200,10 @@ def compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator):
                 idx_start = last_pos_for_rank_x[target_rank]
             last_pos_for_rank_y[cur_rank] = idx_end
         if idx_start != -1:
-            cost = get_cost(diff_cum_sum, idx_start, idx_end)
+            if p == 1:
+                cost = get_cost_w1(diff_cum_sum, idx_start, idx_end)
+            else:
+                cost = get_cost_wp(sorted_z, sorted_distrib_indicator, idx_start, idx_end, p)
             if idx_end == idx_start + 1:
                 heapq.heappush(l_costs, (abs(cost), idx_start, idx_end))
             assert idx_end not in minimal_chain_ending_at
@@ -248,10 +291,11 @@ def generate_solution_using_marginal_costs(costs, ranks_xy, chain_costs_cumsum, 
     --------
     >>> x = np.array([1., 2., 5., 6.])
     >>> y = np.array([3., 4., 11., 12.])
-    >>> _, _, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> ind_x, ind_y, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    >>> sorted_z = np.concatenate((x[ind_x], y[ind_y]))[indices_sort_xy]
     >>> diff_cum_sum = compute_cumulative_sum_differences(x, y, indices_sort_xy, sorted_distrib_indicator)
     >>> ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
-    >>> costs, chain_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    >>> costs, chain_costs_cumsum = compute_costs(sorted_z, diff_cum_sum, diff_ranks, sorted_distrib_indicator, p=1)
     >>> generate_solution_using_marginal_costs(costs, ranks_xy, chain_costs_cumsum, 3, sorted_distrib_indicator)
     (array([1, 2, 3]), array([0, 1, 2]), [1.0, 1.0, 5.0])
     """
@@ -437,7 +481,7 @@ def compute_rank_differences(indices_sort_xy, sorted_distrib_indicator):
     return ranks_xy, diff_ranks
 
 @njit(cache=True, fastmath=True)
-def partial_ot_1d(x, y, max_iter):
+def partial_ot_1d(x, y, max_iter, p=1):
     """Main routine for the partial OT problem in 1D.
     
     Does:
@@ -460,6 +504,8 @@ def partial_ot_1d(x, y, max_iter):
     max_iter : int
         Number of iterations of the algorithm, which is equal to the number of pairs
         in the returned solution.
+    p : int (default: 1)
+        Order of the partial Wasserstein distance to be computed (p-Wasserstein, or $W_p^p$)
 
     Returns
     -------
@@ -482,6 +528,7 @@ def partial_ot_1d(x, y, max_iter):
     """
     # Sort distribs and keep track of their original indices
     indices_sort_x, indices_sort_y, indices_sort_xy, sorted_distrib_indicator = preprocess(x, y)
+    sorted_z = np.concatenate((x[indices_sort_x], y[indices_sort_y]))[indices_sort_xy]
 
     # Precompute useful quantities
     diff_cum_sum = compute_cumulative_sum_differences(x[indices_sort_x], 
@@ -491,7 +538,7 @@ def partial_ot_1d(x, y, max_iter):
     ranks_xy, diff_ranks = compute_rank_differences(indices_sort_xy, sorted_distrib_indicator)
 
     # Compute costs for "minimal chains"
-    costs, chain_costs_cumsum = compute_costs(diff_cum_sum, diff_ranks, sorted_distrib_indicator)
+    costs, chain_costs_cumsum = compute_costs(sorted_z, diff_cum_sum, diff_ranks, sorted_distrib_indicator, p=p)
 
     # Generate solution from sorted costs
     sol_indices_x_sorted, sol_indices_y_sorted, sol_costs = generate_solution_using_marginal_costs(costs, 
@@ -508,7 +555,7 @@ def partial_ot_1d(x, y, max_iter):
 
 
 
-def partial_ot_1d_elbow(x, y, return_all_solutions=False):
+def partial_ot_1d_elbow(x, y, return_all_solutions=False, p=1):
     """Main routine for the partial OT problem in 1D.
     
     Does:
@@ -534,6 +581,8 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False):
     return_all_solutions : bool
         Whether all solutions should be returned (eg. to visualize the elbow) beyond
         the elbow
+    p : int (default: 1)
+        Order of the partial Wasserstein distance to be computed (p-Wasserstein, or $W_p^p$)
 
     Returns
     -------
@@ -557,7 +606,7 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False):
     (array([1, 2, 0]), array([0, 2, 1]), [1.0, 1.0, 4.0], 3)
     """
     n = min(len(x), len(y))
-    indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=n)
+    indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=n, p=p)
     kneedle = KneeLocator(x=np.arange(len(marginal_costs)), 
                           y=np.cumsum(marginal_costs), 
                           S=1.0, 
@@ -584,7 +633,8 @@ if __name__ == "__main__":
     np.random.seed(0)
     x = np.random.rand(30, )
     y = np.random.rand(40, )
-    indices_x, indices_y, marginal_costs, elbow = partial_ot_1d_elbow(x, y)
+    indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=30, p=2)
+    # indices_x, indices_y, marginal_costs, elbow = partial_ot_1d_elbow(x, y, p=2)
     print(len(indices_x), len(indices_y))
     print(indices_x)
     print(indices_y)

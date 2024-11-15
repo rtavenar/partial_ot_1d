@@ -4,12 +4,12 @@ This repository contains code for the PAWL method presented in the paper
 "One for all and all for one: Efficient computation of partial Wasserstein distances on the line".
 
 The main file is `partial.py`, which contains the following two functions:
-* `partial_ot_1d(x, y, max_iter)` where `x` and `y` are numpy arrays of 
+* `partial_ot_1d(x, y, max_iter, p=1)` where `x` and `y` are numpy arrays of 
   shape (n, ) and (m, ) and `max_iter` is the number of pairs one wants to 
   include in the solution. Note however that all partial solutions of size
   lower than `max_iter` can be retrieved from the output of this function
   (see docs of the function for more details)
-* `partial_ot_1d_elbow(x, y, return_all_solutions=False)` where `x` and `y` are numpy arrays of 
+* `partial_ot_1d_elbow(x, y, return_all_solutions=False, p=1)` where `x` and `y` are numpy arrays of 
   shape (n, ) and (m, ). In this alternative implementation, the number of 
   pairs to be included in the solution is inferred using the elbow method on
   the series of costs of partial solutions (see docs of the function for 

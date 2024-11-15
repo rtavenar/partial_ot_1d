@@ -3,6 +3,49 @@ import numpy as np
 from partial import partial_ot_1d
 
 
+def random_slice(dim):
+    theta=np.random.random((100,dim)) #100 random projections
+    theta=np.stack([th/np.sqrt((th**2).sum()) for th in theta])
+    return theta
+
+def ortho_slice(dim):
+    theta = np.eye(dim) #to be sure that all dimensions are considered
+    theta = theta +  np.random.rand(theta.shape[0], theta.shape[1]) #add noise
+    return theta
+    
+
+def all_sliced_pw(X, Y, theta, k=-1):
+        '''
+        compute PAWL for several lines and return **all** solutions
+        '''
+        n, dn = X.shape
+        m, _ =Y.shape
+        if theta is None:
+            theta = ortho_slice(dn).T 
+            theta = np.hstack((theta.T, random_slice(dn).T))
+        if k == -1:
+            k = min(n, m)
+        X_line = np.matmul(X, theta)
+        Y_line = np.matmul(Y, theta)
+
+
+        cum_ot_lines = np.zeros((theta.shape[1], k))
+        all_x_lines = np.zeros((theta.shape[1], k))
+        all_y_lines = np.zeros((theta.shape[1], k))
+
+        for i in range(theta.shape[1]):
+            x_proj, y_proj = X_line[:,i], Y_line[:,i]
+            arg_sort_proj_x = np.argsort(x_proj)
+            arg_sort_proj_y = np.argsort(y_proj)
+            ind_x, ind_y, marg_costs = partial_ot_1d(x_proj, y_proj, k)
+            cum_ot_lines[i] = np.cumsum(marg_costs)
+            sorted_ind_x, sorted_ind_y = np.sort(ind_x), np.sort(ind_y)
+            all_x_lines[i] = arg_sort_proj_x[sorted_ind_x]
+            all_y_lines[i] = arg_sort_proj_y[sorted_ind_y]
+                
+        return all_x_lines, all_y_lines, cum_ot_lines
+
+
 class SlicedPartialOT:
     def __init__(self, n_proj, max_iter_partial=None) -> None:
         self.n_proj = n_proj

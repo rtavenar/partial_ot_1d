@@ -3,3 +3,5 @@ matplotlib
 SciencePlots
 mpl_sizes
 pot==0.9.3
+torchvision
+celer

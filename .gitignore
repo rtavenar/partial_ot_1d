@@ -13,3 +13,5 @@ tex_tmp/
 perturbed_sliced.py
 partial_old.py
 test_swgg_optim_1d.py
+visu_error_shape.py
+SPW_classification.pdf

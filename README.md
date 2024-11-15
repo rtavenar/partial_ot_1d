@@ -21,6 +21,7 @@ If your goal is to reproduce the results contained in the paper, you can:
 * reproduce Table 1 and Fig. 6 (point cloud registration) by
     1. running `run_baselines_icp.py`
     2. gathering results using `visus_shape.py` and `tab_results_icp.py`
+* reproduce Fig. 7 (Unbalanced Domain Adaptation) by running `Figure SPW vs UOT.ipynb`
 
 Note that code for the baselines is located in subfolder `baselines/` and obtained from the following github repositories:
 * https://github.com/thibsej/fast_uot for Fast-UOT

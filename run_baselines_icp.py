@@ -11,7 +11,7 @@ viz = False
 
 for seed in [0, 42, 10, 100, 1000]:
     for problem in ["dragon", 'stanford_bunny', 'mumble_sitting', 'witchcastle']:
-        for percent in [7]: #[5, 7]:
+        for percent in [5, 7]:
             for n_source in [9 * 1000, 10 * 1000]:
                 np.random.seed(seed)
                 baseline_fun = {

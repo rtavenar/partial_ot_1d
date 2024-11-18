@@ -33,7 +33,7 @@ baselines = {
              "pawl_elbow": "PAWL (elbow)"
              }
 datasets = ["stanford_bunny"]
-timings = [30, 60, 10 ** 12]
+timings = 30
 
 plt.style.use(['science'])
 matplotlib.rcParams.update({'font.size': 22})
@@ -50,7 +50,6 @@ for seed in [10]:
                 init_rot = np.eye(3)
                 init_scalar = 1.
                 init_beta = target.mean(axis=0) - source.mean(axis=0)
-                fig = plt.figure(figsize=(20, 20))
 
                 for idx_m, method in enumerate(baselines.keys()):
                     if not os.path.exists(f"results_icp/{problem}_p{percent}_n_source{n_source}_baseline-{method}_seed{seed}.npz"):
@@ -61,29 +60,21 @@ for seed in [10]:
                     scalar_list = [init_scalar] + list(data_results["scalar_list"])
                     beta_list = [init_beta] + list(data_results["beta_list"])
                     timings_list = [0.0] + list(data_results["timings_list"])
-                    for idx_t, t in enumerate(timings):
-                        ax = fig.add_subplot(len(timings), len(baselines), idx_t * len(baselines) + idx_m + 1, projection='3d')
-                        i = 0
-                        while timings_list[i] < t:
-                            i += 1
-                            if i >= len(timings_list):
-                                i -= 1
-                                print(f"Could not find anything for t={t}")
-                                break
-                        rotation = rotation_list[i]
-                        scalar = scalar_list[i]
-                        beta = beta_list[i]
-                        transformed_source_data = source @ rotation * scalar + beta
-                        shape_image(target, transformed_source_data, param=vis_param_list[problem], ax=ax)
-                        if idx_m == 0:
-                            if t < 0:
-                                plt.ylabel(f"At initialization")
-                            elif i == len(timings_list) - 1:
-                                plt.ylabel(f"At convergence")
-                            else:
-                                plt.ylabel(f"After {t} seconds")
-                        if idx_t == 0:
-                            plt.title(baselines[method])
-                plt.tight_layout()
-                plt.subplots_adjust(wspace=-0.2, hspace=-0.55)
-                plt.savefig(f"shape_figs/viz_{problem}_p{percent}_n_source{n_source}_seed{seed}.pdf")
+                    ax = plt.figure(figsize=(5, 5)).add_subplot(projection='3d')
+                    i = 0
+                    while timings_list[i] < timings:
+                        i += 1
+                        if i >= len(timings_list):
+                            i -= 1
+                            print(f"Could not find anything for t={timings}")
+                            break
+                    rotation = rotation_list[i]
+                    scalar = scalar_list[i]
+                    beta = beta_list[i]
+                    transformed_source_data = source @ rotation * scalar + beta
+                    shape_image(target, transformed_source_data, param=vis_param_list[problem], ax=plt.gca())
+                        # if idx_t == 0:
+                        #     plt.title(baselines[method])
+                    plt.tight_layout()
+                    # plt.subplots_adjust(wspace=-0.2, hspace=-0.55)
+                    plt.savefig(f"shape_figs/viz_{problem}_{timings}sec_{method}_p{percent}_n_source{n_source}_seed{seed}.pdf")

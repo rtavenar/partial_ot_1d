@@ -39,5 +39,6 @@ If your goal is to reproduce the results contained in the paper, you can:
 Note that code for the baselines is located in subfolder `baselines/` and obtained from the following github repositories:
 * https://github.com/thibsej/fast_uot for Fast-UOT
 * https://github.com/yikun-baio/sliced_opt for SOPT and SPOT baselines and, more generally, code related to the point cloud registration experiment
+* https://github.com/kaiyiz/Computing-all-optimal-partial-transport for computing OT profiles.
 
 Finally, `visu_elbow.py` gives a simple visualization of the effect of selecting the mass to be transferred using the elbow method.

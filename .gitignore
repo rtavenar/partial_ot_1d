@@ -16,3 +16,17 @@ test_swgg_optim_1d.py
 visu_error_shape.py
 SPW_classification.pdf
 grad_PAWL.pdf
+timings_partial_sato.pdf
+Expe_SPW_classification.pdf
+baselines/treegkr_sato/
+baselines/sample_timings_sato.cpp
+.vscode/
+xp_sato/
+timings_partial_bai.*
+timings_partial_k.*
+timings_partial_sato.*
+timings_partial_sejourne.*
+timings_partial_sub_k.*
+test_uot.py
+fig7.py
+figure7.npz

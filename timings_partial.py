@@ -71,7 +71,7 @@ for n in values_for_n:
     timings_aistats22.append(sum_time_aistats22)
 
 plt.style.use(['science'])
-formatter = get_format("ICLR-large") # options: ICLR, ICML, NeurIPS, InfThesis
+formatter = get_format("ICLR") # options: ICLR, ICML, NeurIPS, InfThesis
 plt.figure(figsize=formatter.line_width_plot(aspect_ratio="normal"))
 plt.loglog(values_for_n, timings_pawl, label="PAWL $W_1$")
 plt.loglog(values_for_n, timings_pawl_w2, label="PAWL $W_2^2$")

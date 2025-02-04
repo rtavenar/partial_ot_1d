@@ -631,10 +631,19 @@ def partial_ot_1d_elbow(x, y, return_all_solutions=False, p=1):
 
 if __name__ == "__main__":
     np.random.seed(0)
-    x = np.random.rand(30, )
-    y = np.random.rand(40, )
-    indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=30, p=2)
+    # x = np.random.rand(30, )
+    # y = np.random.rand(40, )
+    x = np.array([0., 1, 2])
+    y = np.array([-2., -1, 0])
+    k = 2
+    indices_x, indices_y, marginal_costs = partial_ot_1d(x, y, max_iter=k, p=1)
+    print(indices_x, indices_y, marginal_costs)
+    argsort_x = np.argsort(x[indices_x])
+    argsort_y = np.argsort(y[indices_y])
+    pi_k = np.zeros((3, 3))
+    pi_k[indices_x[argsort_x], indices_y[argsort_y]] = 1
+    print(pi_k)
     # indices_x, indices_y, marginal_costs, elbow = partial_ot_1d_elbow(x, y, p=2)
-    print(len(indices_x), len(indices_y))
-    print(indices_x)
-    print(indices_y)
+    # print(len(indices_x), len(indices_y))
+    # print(indices_x)
+    # print(indices_y)
